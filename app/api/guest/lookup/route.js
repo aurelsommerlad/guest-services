@@ -22,7 +22,7 @@ export async function POST(request) {
       reservations: reservations.map((r) => ({
         id: r.id,
         bookingId: r.bookingId || null,
-        propertyId: r.propertyId,
+        propertyId: r.property?.id,
         arrival: r.arrival || r.checkInDate || null,
         departure: getDepartureDate(r),
         status: r.status || null,

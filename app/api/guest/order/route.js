@@ -26,7 +26,7 @@ export async function POST(request) {
 
     const result = await placeGuestOrder({
       reservation,
-      propertyId: reservation.propertyId,
+      propertyId: reservation.property?.id,
       lines,
       guestName,
     });

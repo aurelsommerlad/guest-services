@@ -19,7 +19,7 @@ export async function POST(request) {
       return NextResponse.json({ error: GENERIC_LOOKUP_ERROR }, { status: 404 });
     }
 
-    const catalog = await getGuestCatalog(reservation, reservation.propertyId);
+    const catalog = await getGuestCatalog(reservation, reservation.property?.id);
     return NextResponse.json(catalog);
   } catch (err) {
     console.error("Fehler beim Laden des Extras-Katalogs:", err);
