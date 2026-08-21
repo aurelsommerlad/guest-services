@@ -33,7 +33,7 @@ vollständig gegen `.data/db.json`.
    **Simple Client** (Client Credentials Grant) registrieren.
 2. Benötigte Scopes exakt:
    ```
-   reservations.read reservations.manage offers.read setup.read folios.read
+   reservations.read reservations.manage offers.read properties.read folios.read
    ```
 3. Client ID + Secret als `APALEO_CLIENT_ID` / `APALEO_CLIENT_SECRET`
    hinterlegen.

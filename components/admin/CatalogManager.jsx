@@ -26,12 +26,18 @@ export default function CatalogManager() {
 
   useEffect(() => {
     fetch("/api/admin/properties")
-      .then((r) => r.json())
+      .then(async (r) => {
+        const data = await r.json().catch(() => ({}));
+        if (!r.ok) {
+          throw new Error(data.error || "Properties konnten nicht geladen werden.");
+        }
+        return data;
+      })
       .then((data) => {
         setProperties(data.properties || []);
         if (data.properties?.length) setPropertyId(data.properties[0].id);
       })
-      .catch(() => setError("Properties konnten nicht geladen werden."));
+      .catch((err) => setError(err.message));
   }, []);
 
   useEffect(() => {
