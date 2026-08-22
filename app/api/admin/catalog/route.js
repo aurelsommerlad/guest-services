@@ -1,6 +1,13 @@
 import { NextResponse } from "next/server";
 import { requireRole } from "@/lib/auth";
-import { getCatalog, upsertCatalogItem, BOOKING_RULES, DEFAULT_BOOKING_RULE } from "@/lib/store";
+import {
+  getCatalog,
+  upsertCatalogItem,
+  BOOKING_RULES,
+  DEFAULT_BOOKING_RULE,
+  FULFILLMENT_MODES,
+  DEFAULT_FULFILLMENT_MODE,
+} from "@/lib/store";
 
 export async function GET(request) {
   const { error } = await requireRole(["admin", "manager"]);
@@ -41,6 +48,9 @@ export async function POST(request) {
     // empty; the guest-facing fallback default is resolved at read time,
     // not baked in here, so it stays correct if bookingRule changes later.
     priceUnitLabel: typeof item.priceUnitLabel === "string" ? item.priceUnitLabel.trim() : "",
+    fulfillmentMode: FULFILLMENT_MODES.includes(item.fulfillmentMode)
+      ? item.fulfillmentMode
+      : DEFAULT_FULFILLMENT_MODE,
   });
 
   return NextResponse.json({ item: saved });

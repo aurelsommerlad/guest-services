@@ -10,6 +10,11 @@ const BOOKING_RULE_OPTIONS = [
   { value: "departure_day", label: "Am Abreisetag" },
 ];
 
+const FULFILLMENT_MODE_OPTIONS = [
+  { value: "instant", label: "Direkt buchbar" },
+  { value: "request", label: "Auf Anfrage" },
+];
+
 function emptyRow(service) {
   return {
     serviceId: service.id,
@@ -22,6 +27,7 @@ function emptyRow(service) {
     active: false,
     bookingRule: "per_stay",
     priceUnitLabel: "",
+    fulfillmentMode: "instant",
   };
 }
 
@@ -170,6 +176,20 @@ export default function CatalogManager() {
                   className="mt-1 w-full rounded-md border border-slate-300 px-3 py-1.5 text-sm"
                 >
                   {BOOKING_RULE_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-500">Buchungsart</label>
+                <select
+                  value={row.fulfillmentMode || "instant"}
+                  onChange={(e) => updateRow(row.serviceId, { fulfillmentMode: e.target.value })}
+                  className="mt-1 w-full rounded-md border border-slate-300 px-3 py-1.5 text-sm"
+                >
+                  {FULFILLMENT_MODE_OPTIONS.map((opt) => (
                     <option key={opt.value} value={opt.value}>
                       {opt.label}
                     </option>

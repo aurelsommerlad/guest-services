@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { formatDate, formatPrice } from "@/lib/format";
 import { computePriceBreakdown } from "@/lib/priceDisplay";
 
@@ -18,8 +18,6 @@ const NO_ITEMS_MESSAGE = "Für Deine Reservierung sind aktuell keine Extras verf
 // its dark text and primary buttons. See app/globals.css for the font.
 const PRIMARY_BUTTON =
   "inline-flex w-full items-center justify-center rounded-md bg-stone-900 px-6 py-3.5 text-sm font-semibold uppercase tracking-wide text-white transition hover:bg-black disabled:cursor-not-allowed disabled:opacity-50";
-const COMPACT_DARK_BUTTON =
-  "inline-flex flex-shrink-0 items-center justify-center whitespace-nowrap rounded-md bg-stone-900 px-5 py-3 text-sm font-semibold uppercase tracking-wide text-white transition hover:bg-black disabled:cursor-not-allowed disabled:opacity-50";
 const SECONDARY_BUTTON =
   "inline-flex items-center justify-center rounded-md border border-stone-300 bg-white px-5 py-2.5 text-sm font-medium uppercase tracking-wide text-stone-700 transition hover:border-stone-400 hover:bg-stone-50";
 const INPUT_CLASS =
@@ -58,6 +56,35 @@ function DefaultItemIcon() {
     >
       <path strokeLinecap="round" strokeLinejoin="round" d="M4 19h16M6 19c0-5 1-9 6-9s6 4 6 9M12 6V4m-2 0h4" />
     </svg>
+  );
+}
+
+// Guards against a real hydration race: <img error> is a non-bubbling DOM
+// event, so if the request 404s (as it will until the logo asset is added)
+// before React finishes hydrating, a plain onError handler can miss it
+// entirely and leave a broken-image glyph on screen permanently. Checking
+// img.complete/naturalWidth once after mount catches that already-failed
+// case; onError still covers a request that fails after hydration.
+function BrandLogo({ src, alt, className }) {
+  const [visible, setVisible] = useState(true);
+  const imgRef = useRef(null);
+
+  useEffect(() => {
+    const img = imgRef.current;
+    if (img && img.complete && img.naturalWidth === 0) {
+      setVisible(false);
+    }
+  }, []);
+
+  if (!visible) return null;
+  return (
+    <img
+      ref={imgRef}
+      src={src}
+      alt={alt}
+      className={className}
+      onError={() => setVisible(false)}
+    />
   );
 }
 
@@ -149,7 +176,7 @@ function ReservationPicker({ reservations, onSelect }) {
   );
 }
 
-function CatalogItem({ item, count, onChange }) {
+function InstantCatalogItem({ item, count, onChange }) {
   // The unit price + its label in the top-right corner never changes with
   // quantity — only this optional breakdown line, shown once the guest has
   // selected at least one unit, reflects nights/quantity multiplication.
@@ -220,14 +247,128 @@ function CatalogItem({ item, count, onChange }) {
   );
 }
 
-function CatalogView({ items, cart, setCart, onBook, booking, guestName, setGuestName }) {
-  const [coupon, setCoupon] = useState("");
+function RequestCatalogItem({ item, reservationId, lastName, guestName }) {
+  // idle -> form -> submitting -> sent, or -> error (back to form)
+  const [status, setStatus] = useState("idle");
+  const [name, setName] = useState(guestName || "");
+  const [email, setEmail] = useState("");
+  const [error, setError] = useState("");
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    setStatus("submitting");
+    setError("");
+    try {
+      await postJSON("/api/guest/request", {
+        reservationId,
+        lastName,
+        guestName: name,
+        guestEmail: email,
+        serviceId: item.serviceId,
+        quantity: 1,
+      });
+      setStatus("sent");
+    } catch (err) {
+      setError(err.message);
+      setStatus("error");
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-4 rounded-lg border border-stone-200 bg-white p-4 sm:flex-row sm:items-start sm:gap-6 sm:p-6">
+      <div className="flex items-start gap-4 sm:flex-1 sm:gap-6">
+        <div className="h-16 w-16 flex-shrink-0 overflow-hidden rounded-md bg-stone-100 sm:h-20 sm:w-20">
+          {item.imageUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={item.imageUrl} alt={item.displayName} className="h-full w-full object-cover" />
+          ) : (
+            <div className="flex h-full w-full items-center justify-center">
+              <DefaultItemIcon />
+            </div>
+          )}
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <h3 className="text-base font-semibold text-stone-900 sm:text-lg">{item.displayName}</h3>
+            <span className="rounded-full border border-stone-300 px-2 py-0.5 text-[11px] font-medium uppercase tracking-wide text-stone-500">
+              Auf Anfrage
+            </span>
+          </div>
+          {item.description && <p className="mt-1 text-sm text-stone-500">{item.description}</p>}
+          <p className="mt-2 text-xs text-stone-500 sm:text-sm">
+            Wir prüfen die Verfügbarkeit und melden uns bei Dir.
+          </p>
+        </div>
+      </div>
+
+      <div className="flex flex-col items-stretch gap-3 sm:w-64 sm:flex-shrink-0">
+        {item.unitPrice && (
+          <div className="text-right">
+            <div className="text-lg font-semibold text-stone-900">{formatPrice(item.unitPrice)}</div>
+            <div className="text-xs uppercase tracking-wide text-stone-500">
+              {item.priceUnitLabel ? `${item.priceUnitLabel} · falls bestätigt` : "Falls bestätigt"}
+            </div>
+          </div>
+        )}
+
+        {status === "sent" ? (
+          <div className="rounded-md border border-stone-200 bg-stone-50 px-3 py-2.5 text-sm text-stone-700">
+            <p className="font-medium text-stone-900">Deine Anfrage wurde gesendet.</p>
+            <p className="mt-0.5 text-xs text-stone-500">
+              Wir prüfen die Verfügbarkeit und melden uns bei Dir.
+            </p>
+          </div>
+        ) : status === "form" || status === "submitting" || status === "error" ? (
+          <form onSubmit={handleSubmit} className="space-y-2">
+            <input
+              type="text"
+              required
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Dein Name"
+              className={`${INPUT_CLASS} py-2 text-sm`}
+            />
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="E-Mail (optional)"
+              className={`${INPUT_CLASS} py-2 text-sm`}
+            />
+            {status === "error" && <p className="text-xs text-red-600">{error}</p>}
+            <button type="submit" disabled={status === "submitting"} className={`${SECONDARY_BUTTON} w-full`}>
+              {status === "submitting" ? "Wird gesendet…" : "Anfrage senden"}
+            </button>
+          </form>
+        ) : (
+          <button type="button" onClick={() => setStatus("form")} className={SECONDARY_BUTTON}>
+            Anfragen
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function CatalogView({
+  items,
+  cart,
+  setCart,
+  onBook,
+  booking,
+  guestName,
+  setGuestName,
+  reservationId,
+  lastName,
+}) {
+  const instantItems = items.filter((item) => (item.fulfillmentMode || "instant") === "instant");
+  const requestItems = items.filter((item) => item.fulfillmentMode === "request");
 
   const { totalCount, totalPrice } = useMemo(() => {
     let count = 0;
     let amount = 0;
     let currency = "EUR";
-    for (const item of items) {
+    for (const item of instantItems) {
       const qty = cart[item.serviceId] || 0;
       if (qty > 0 && item.price) {
         count += qty;
@@ -236,17 +377,26 @@ function CatalogView({ items, cart, setCart, onBook, booking, guestName, setGues
       }
     }
     return { totalCount: count, totalPrice: { amount: Math.round(amount * 100) / 100, currency } };
-  }, [items, cart]);
+  }, [instantItems, cart]);
 
   return (
     <div className="space-y-4 pb-64 sm:pb-56">
       <div className="space-y-3">
-        {items.map((item) => (
-          <CatalogItem
+        {instantItems.map((item) => (
+          <InstantCatalogItem
             key={item.serviceId}
             item={item}
             count={cart[item.serviceId] || 0}
             onChange={(next) => setCart((prev) => ({ ...prev, [item.serviceId]: next }))}
+          />
+        ))}
+        {requestItems.map((item) => (
+          <RequestCatalogItem
+            key={item.serviceId}
+            item={item}
+            reservationId={reservationId}
+            lastName={lastName}
+            guestName={guestName}
           />
         ))}
       </div>
@@ -261,18 +411,6 @@ function CatalogView({ items, cart, setCart, onBook, booking, guestName, setGues
               placeholder="Dein Name (für die Buchung)"
               className={INPUT_CLASS}
             />
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={coupon}
-                onChange={(e) => setCoupon(e.target.value)}
-                placeholder="Gutscheincode"
-                className={`flex-1 ${INPUT_CLASS}`}
-              />
-              <button type="button" disabled={!coupon.trim()} className={COMPACT_DARK_BUTTON}>
-                Anwenden
-              </button>
-            </div>
             <div className="flex flex-wrap items-baseline justify-between gap-2 text-sm text-stone-600">
               <span>
                 {totalCount} Extra{totalCount > 1 ? "s" : ""} ausgewählt
@@ -424,6 +562,16 @@ export default function GuestApp() {
           isWideStep ? "max-w-3xl lg:max-w-5xl" : "max-w-lg"
         }`}
       >
+        {/*
+          Drop the UNIQUE PLACES logo file in at public/logo/unique-places-logo.svg
+          (a black/monochrome SVG or PNG works best) and it will appear here
+          automatically. Until that file exists, BrandLogo hides itself
+          instead of showing a broken-image icon.
+        */}
+        <div className="mb-10 flex justify-center sm:mb-14">
+          <BrandLogo src="/logo/unique-places-logo.svg" alt="Unique Places" className="h-7 w-auto sm:h-9" />
+        </div>
+
         <header className="mb-8 text-left">
           <h1 className="text-2xl font-semibold text-stone-900 sm:text-3xl">Deine Extras</h1>
           <p className="mt-2 text-sm text-stone-500 sm:text-base">
@@ -451,6 +599,8 @@ export default function GuestApp() {
                 booking={booking}
                 guestName={guestName}
                 setGuestName={setGuestName}
+                reservationId={reservation?.id}
+                lastName={lastName}
               />
             )}
           </>

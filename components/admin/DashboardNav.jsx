@@ -1,11 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 
 const NAV_ITEMS = [
   { href: "/admin/orders", label: "Bestellungen", roles: ["admin", "manager", "viewer"] },
+  { href: "/admin/requests", label: "Anfragen", roles: ["admin", "manager", "viewer"] },
   { href: "/admin/catalog", label: "Katalog", roles: ["admin", "manager"] },
   { href: "/admin/users", label: "Benutzer", roles: ["admin"] },
 ];
@@ -88,6 +89,23 @@ export default function DashboardNav({ session }) {
   const pathname = usePathname();
   const router = useRouter();
   const [showPasswordForm, setShowPasswordForm] = useState(false);
+  const [pendingRequestCount, setPendingRequestCount] = useState(0);
+
+  useEffect(() => {
+    if (!["admin", "manager", "viewer"].includes(session.role)) return;
+    let cancelled = false;
+    fetch("/api/admin/requests")
+      .then((r) => r.json())
+      .then((data) => {
+        if (cancelled) return;
+        const pending = (data.requests || []).filter((r) => r.status === "pending").length;
+        setPendingRequestCount(pending);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [session.role, pathname]);
 
   async function handleLogout() {
     await fetch("/api/admin/logout", { method: "POST" });
@@ -112,6 +130,9 @@ export default function DashboardNav({ session }) {
               }`}
             >
               {item.label}
+              {item.href === "/admin/requests" && pendingRequestCount > 0
+                ? ` (${pendingRequestCount})`
+                : ""}
             </Link>
           ))}
         </div>
