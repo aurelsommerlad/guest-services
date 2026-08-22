@@ -562,14 +562,8 @@ export default function GuestApp() {
           isWideStep ? "max-w-3xl lg:max-w-5xl" : "max-w-lg"
         }`}
       >
-        {/*
-          Drop the UNIQUE PLACES logo file in at public/logo/unique-places-logo.svg
-          (a black/monochrome SVG or PNG works best) and it will appear here
-          automatically. Until that file exists, BrandLogo hides itself
-          instead of showing a broken-image icon.
-        */}
         <div className="mb-10 flex justify-center sm:mb-14">
-          <BrandLogo src="/logo/unique-places-logo.svg" alt="Unique Places" className="h-7 w-auto sm:h-9" />
+          <BrandLogo src="/logo/unique-places-logo.png" alt="Unique Places" className="h-10 w-auto sm:h-12" />
         </div>
 
         <header className="mb-8 text-left">
