@@ -2,6 +2,13 @@
 
 import { useEffect, useState } from "react";
 
+const BOOKING_RULE_OPTIONS = [
+  { value: "per_stay", label: "Einmal pro Aufenthalt" },
+  { value: "per_night", label: "Pro Nacht" },
+  { value: "arrival_day", label: "Am Anreisetag" },
+  { value: "departure_day", label: "Am Abreisetag" },
+];
+
 function emptyRow(service) {
   return {
     serviceId: service.id,
@@ -12,6 +19,7 @@ function emptyRow(service) {
     category: "",
     imageUrl: "",
     active: false,
+    bookingRule: "per_stay",
   };
 }
 
@@ -151,6 +159,20 @@ export default function CatalogManager() {
                   onChange={(e) => updateRow(row.serviceId, { category: e.target.value })}
                   className="mt-1 w-full rounded-md border border-slate-300 px-3 py-1.5 text-sm"
                 />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-500">Berechnung</label>
+                <select
+                  value={row.bookingRule || "per_stay"}
+                  onChange={(e) => updateRow(row.serviceId, { bookingRule: e.target.value })}
+                  className="mt-1 w-full rounded-md border border-slate-300 px-3 py-1.5 text-sm"
+                >
+                  {BOOKING_RULE_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
               </div>
               <div className="sm:col-span-2">
                 <label className="block text-xs font-medium text-slate-500">Beschreibung</label>

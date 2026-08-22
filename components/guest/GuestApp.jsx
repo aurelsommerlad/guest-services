@@ -123,6 +123,11 @@ function CatalogItem({ item, count, onChange }) {
         {item.description && (
           <p className="mt-1 text-sm text-slate-500">{item.description}</p>
         )}
+        {item.bookingRule === "per_night" && item.nights > 1 && (
+          <p className="mt-1 text-xs text-slate-500">
+            {formatPrice(item.unitPrice)} × {item.nights} Nächte = {formatPrice(item.price)}
+          </p>
+        )}
         <div className="mt-3 flex items-center gap-3">
           <button
             type="button"

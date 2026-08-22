@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireRole } from "@/lib/auth";
-import { getCatalog, upsertCatalogItem } from "@/lib/store";
+import { getCatalog, upsertCatalogItem, BOOKING_RULES, DEFAULT_BOOKING_RULE } from "@/lib/store";
 
 export async function GET(request) {
   const { error } = await requireRole(["admin", "manager"]);
@@ -36,6 +36,7 @@ export async function POST(request) {
     category: item.category || "",
     imageUrl: item.imageUrl || "",
     active: Boolean(item.active),
+    bookingRule: BOOKING_RULES.includes(item.bookingRule) ? item.bookingRule : DEFAULT_BOOKING_RULE,
   });
 
   return NextResponse.json({ item: saved });
