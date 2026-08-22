@@ -5,7 +5,12 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { resolvePriceUnitLabel, computePriceBreakdown, DEFAULT_PRICE_UNIT_LABELS } from "../lib/priceDisplay.js";
+import {
+  resolvePriceUnitLabel,
+  computePriceBreakdown,
+  DEFAULT_PRICE_UNIT_LABELS,
+  DEFAULT_PRICE_UNIT_LABELS_EN,
+} from "../lib/priceDisplay.js";
 
 test("resolvePriceUnitLabel: custom label wins over the bookingRule default", () => {
   assert.equal(resolvePriceUnitLabel("per_night", "pro Stellplatz / Nacht"), "pro Stellplatz / Nacht");
@@ -26,6 +31,27 @@ test("resolvePriceUnitLabel: fallback labels per bookingRule when unset", () => 
 
 test("resolvePriceUnitLabel: unknown bookingRule falls back to empty string, never throws", () => {
   assert.equal(resolvePriceUnitLabel("something_unexpected", ""), "");
+});
+
+test("resolvePriceUnitLabel: defaults to German when no language argument is given (backward compatible)", () => {
+  assert.equal(resolvePriceUnitLabel("per_night", ""), DEFAULT_PRICE_UNIT_LABELS.per_night);
+});
+
+test("resolvePriceUnitLabel: English defaults per bookingRule when unset", () => {
+  assert.equal(resolvePriceUnitLabel("per_night", undefined, "en"), "per night");
+  assert.equal(resolvePriceUnitLabel("per_stay", "", "en"), "per stay");
+  assert.equal(resolvePriceUnitLabel("arrival_day", null, "en"), "one-time");
+  assert.equal(resolvePriceUnitLabel("departure_day", "", "en"), "one-time");
+  assert.deepEqual(DEFAULT_PRICE_UNIT_LABELS_EN, {
+    per_night: "per night",
+    per_stay: "per stay",
+    arrival_day: "one-time",
+    departure_day: "one-time",
+  });
+});
+
+test("resolvePriceUnitLabel: a custom label wins regardless of requested language", () => {
+  assert.equal(resolvePriceUnitLabel("per_night", "pro Stellplatz / Nacht", "en"), "pro Stellplatz / Nacht");
 });
 
 test("computePriceBreakdown: quantity 0 shows nothing (no total before selection)", () => {

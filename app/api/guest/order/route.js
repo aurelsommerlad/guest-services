@@ -1,8 +1,6 @@
 import { NextResponse } from "next/server";
-import { searchReservations, placeGuestOrder, GENERIC_LOOKUP_ERROR } from "@/lib/guest";
-
-const BOOKING_FAILED_MESSAGE =
-  "Die Buchung konnte nicht durchgeführt werden. Bitte versuche es erneut oder wende Dich an die Rezeption.";
+import { searchReservations, placeGuestOrder, getLookupErrorMessage } from "@/lib/guest";
+import { t } from "@/lib/i18n";
 
 export async function POST(request) {
   const body = await request.json().catch(() => null);
@@ -10,18 +8,16 @@ export async function POST(request) {
   const lastName = String(body?.lastName || "").trim();
   const guestName = String(body?.guestName || lastName || "").trim();
   const lines = Array.isArray(body?.lines) ? body.lines : [];
+  const language = body?.language;
 
   if (!reservationId || !lastName || !lines.length) {
-    return NextResponse.json(
-      { error: "Bitte wähle mindestens eine Zusatzleistung aus." },
-      { status: 400 }
-    );
+    return NextResponse.json({ error: t(language, "selectAtLeastOneError") }, { status: 400 });
   }
 
   try {
     const [reservation] = await searchReservations(reservationId, lastName);
     if (!reservation) {
-      return NextResponse.json({ error: GENERIC_LOOKUP_ERROR }, { status: 404 });
+      return NextResponse.json({ error: getLookupErrorMessage(language) }, { status: 404 });
     }
 
     const result = await placeGuestOrder({
@@ -32,12 +28,15 @@ export async function POST(request) {
     });
 
     if (!result.booked.length) {
-      return NextResponse.json({ error: BOOKING_FAILED_MESSAGE, failed: result.failed }, { status: 502 });
+      return NextResponse.json(
+        { error: t(language, "bookingFailedError"), failed: result.failed },
+        { status: 502 }
+      );
     }
 
     return NextResponse.json(result);
   } catch (err) {
     console.error("Fehler bei der Extras-Buchung:", err);
-    return NextResponse.json({ error: BOOKING_FAILED_MESSAGE }, { status: 502 });
+    return NextResponse.json({ error: t(language, "bookingFailedError") }, { status: 502 });
   }
 }

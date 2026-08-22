@@ -34,6 +34,10 @@ export async function POST(request) {
     return NextResponse.json({ error: "propertyId und item.serviceId sind erforderlich." }, { status: 400 });
   }
 
+  function optionalText(value) {
+    return typeof value === "string" ? value.trim() : "";
+  }
+
   const saved = await upsertCatalogItem(propertyId, {
     serviceId: item.serviceId,
     code: item.code || "",
@@ -47,10 +51,20 @@ export async function POST(request) {
     // Presentation only (see lib/priceDisplay.js) — stored as entered, or
     // empty; the guest-facing fallback default is resolved at read time,
     // not baked in here, so it stays correct if bookingRule changes later.
-    priceUnitLabel: typeof item.priceUnitLabel === "string" ? item.priceUnitLabel.trim() : "",
+    priceUnitLabel: optionalText(item.priceUnitLabel),
     fulfillmentMode: FULFILLMENT_MODES.includes(item.fulfillmentMode)
       ? item.fulfillmentMode
       : DEFAULT_FULFILLMENT_MODE,
+    // Optional per-language overrides (see lib/catalogLocalization.js for
+    // how these fit into the guest-facing fallback chain). All optional —
+    // an empty string here just means "no override for this language",
+    // never a validation error.
+    displayNameDe: optionalText(item.displayNameDe),
+    displayNameEn: optionalText(item.displayNameEn),
+    descriptionDe: optionalText(item.descriptionDe),
+    descriptionEn: optionalText(item.descriptionEn),
+    priceUnitLabelDe: optionalText(item.priceUnitLabelDe),
+    priceUnitLabelEn: optionalText(item.priceUnitLabelEn),
   });
 
   return NextResponse.json({ item: saved });

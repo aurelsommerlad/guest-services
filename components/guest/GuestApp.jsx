@@ -3,10 +3,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { formatDate, formatPrice } from "@/lib/format";
 import { computePriceBreakdown } from "@/lib/priceDisplay";
+import { LANGUAGES, DEFAULT_LANGUAGE, t, translateExtraCount } from "@/lib/i18n";
 
-const PAST_STAY_MESSAGE =
-  "Diese Reservierung liegt bereits in der Vergangenheit. Über das Portal können daher keine weiteren Extras mehr gebucht werden – bitte wende Dich an die Rezeption.";
-const NO_ITEMS_MESSAGE = "Für Deine Reservierung sind aktuell keine Extras verfügbar.";
+const LANGUAGE_STORAGE_KEY = "guestLanguage";
 
 // Shared style tokens for the guest-facing frontend only — kept local to
 // this file (the only place these components live) rather than duplicated
@@ -15,7 +14,7 @@ const NO_ITEMS_MESSAGE = "Für Deine Reservierung sind aktuell keine Extras verf
 // reference site (unique-places.com) is blocked by this environment's
 // network egress policy and couldn't be inspected directly for exact
 // values — stone-50/100/200 approximate its beige framing, stone-900/black
-// its dark text and primary buttons. See app/globals.css for the font.
+// its dark text and primary buttons. See app/globals.css for the fonts.
 const PRIMARY_BUTTON =
   "inline-flex w-full items-center justify-center rounded-md bg-stone-900 px-6 py-3.5 text-sm font-semibold uppercase tracking-wide text-white transition hover:bg-black disabled:cursor-not-allowed disabled:opacity-50";
 const SECONDARY_BUTTON =
@@ -25,6 +24,8 @@ const INPUT_CLASS =
 const ERROR_BANNER = "rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700";
 const NOTICE_BANNER = "rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800";
 const LABEL_CLASS = "block text-sm font-medium text-stone-700";
+// Josefin Sans (weight 400) for headings/titles — see app/globals.css.
+const HEADING_CLASS = "guest-heading";
 
 async function postJSON(url, body) {
   const res = await fetch(url, {
@@ -88,6 +89,29 @@ function BrandLogo({ src, alt, className }) {
   );
 }
 
+// "DE | EN" — minimal, monochrome, no dropdown chrome, matching the rest
+// of the guest-facing design system (black/grey, no blue). Placed directly
+// below the centered logo.
+function LanguageSwitcher({ language, onChange }) {
+  return (
+    <div className="flex items-center justify-center gap-2 text-xs font-medium uppercase tracking-wide text-stone-400">
+      {LANGUAGES.map((lang, i) => (
+        <span key={lang} className="flex items-center gap-2">
+          {i > 0 && <span aria-hidden="true">|</span>}
+          <button
+            type="button"
+            onClick={() => onChange(lang)}
+            aria-pressed={language === lang}
+            className={`transition hover:text-stone-700 ${language === lang ? "text-stone-900" : ""}`}
+          >
+            {lang.toUpperCase()}
+          </button>
+        </span>
+      ))}
+    </div>
+  );
+}
+
 function CheckIcon() {
   return (
     <svg
@@ -104,7 +128,7 @@ function CheckIcon() {
   );
 }
 
-function SearchForm({ onSubmit, loading, error }) {
+function SearchForm({ language, onSubmit, loading, error }) {
   const [number, setNumber] = useState("");
   const [lastName, setLastName] = useState("");
 
@@ -118,7 +142,7 @@ function SearchForm({ onSubmit, loading, error }) {
     >
       <div>
         <label className={LABEL_CLASS} htmlFor="number">
-          Reservierungs- oder Buchungsnummer
+          {t(language, "searchNumberLabel")}
         </label>
         <input
           id="number"
@@ -127,13 +151,13 @@ function SearchForm({ onSubmit, loading, error }) {
           value={number}
           onChange={(e) => setNumber(e.target.value)}
           className={`mt-1.5 ${INPUT_CLASS}`}
-          placeholder="z. B. 1234567"
+          placeholder={t(language, "searchNumberPlaceholder")}
           autoComplete="off"
         />
       </div>
       <div>
         <label className={LABEL_CLASS} htmlFor="lastName">
-          Nachname
+          {t(language, "searchLastNameLabel")}
         </label>
         <input
           id="lastName"
@@ -142,33 +166,33 @@ function SearchForm({ onSubmit, loading, error }) {
           value={lastName}
           onChange={(e) => setLastName(e.target.value)}
           className={`mt-1.5 ${INPUT_CLASS}`}
-          placeholder="Dein Nachname"
+          placeholder={t(language, "searchLastNamePlaceholder")}
           autoComplete="off"
         />
       </div>
       {error && <p className={ERROR_BANNER}>{error}</p>}
       <button type="submit" disabled={loading} className={PRIMARY_BUTTON}>
-        {loading ? "Wird gesucht…" : "Reservierung finden"}
+        {loading ? t(language, "searchButtonLoading") : t(language, "searchButton")}
       </button>
     </form>
   );
 }
 
-function ReservationPicker({ reservations, onSelect }) {
+function ReservationPicker({ language, reservations, onSelect }) {
   return (
     <div className="space-y-3">
-      <p className="text-sm text-stone-600">
-        Wir haben mehrere Reservierungen gefunden. Bitte wähle die passende aus:
-      </p>
+      <p className="text-sm text-stone-600">{t(language, "multipleReservationsHint")}</p>
       {reservations.map((r) => (
         <button
           key={r.id}
           onClick={() => onSelect(r)}
           className="block w-full rounded-md border border-stone-200 bg-white px-4 py-3 text-left transition hover:border-stone-400"
         >
-          <div className="font-semibold text-stone-900">Reservierung {r.id}</div>
+          <div className="font-semibold text-stone-900">
+            {t(language, "reservationLabel")} {r.id}
+          </div>
           <div className="text-sm text-stone-500">
-            {formatDate(r.arrival)} – {formatDate(r.departure)}
+            {formatDate(r.arrival, language)} – {formatDate(r.departure, language)}
           </div>
         </button>
       ))}
@@ -176,7 +200,7 @@ function ReservationPicker({ reservations, onSelect }) {
   );
 }
 
-function InstantCatalogItem({ item, count, onChange }) {
+function InstantCatalogItem({ item, language, count, onChange }) {
   // The unit price + its label in the top-right corner never changes with
   // quantity — only this optional breakdown line, shown once the guest has
   // selected at least one unit, reflects nights/quantity multiplication.
@@ -186,6 +210,9 @@ function InstantCatalogItem({ item, count, onChange }) {
     price: item.price,
     count,
   });
+  const displayName = item.displayName[language];
+  const description = item.description[language];
+  const priceUnitLabel = item.priceUnitLabel[language];
 
   return (
     <div className="flex flex-col gap-4 rounded-lg border border-stone-200 bg-white p-4 sm:flex-row sm:items-center sm:gap-6 sm:p-6">
@@ -193,7 +220,7 @@ function InstantCatalogItem({ item, count, onChange }) {
         <div className="h-16 w-16 flex-shrink-0 overflow-hidden rounded-md bg-stone-100 sm:h-20 sm:w-20">
           {item.imageUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={item.imageUrl} alt={item.displayName} className="h-full w-full object-cover" />
+            <img src={item.imageUrl} alt={displayName} className="h-full w-full object-cover" />
           ) : (
             <div className="flex h-full w-full items-center justify-center">
               <DefaultItemIcon />
@@ -201,15 +228,15 @@ function InstantCatalogItem({ item, count, onChange }) {
           )}
         </div>
         <div className="min-w-0 flex-1">
-          <h3 className="text-base font-semibold text-stone-900 sm:text-lg">{item.displayName}</h3>
-          {item.description && <p className="mt-1 text-sm text-stone-500">{item.description}</p>}
+          <h3 className={`${HEADING_CLASS} text-base text-stone-900 sm:text-lg`}>{displayName}</h3>
+          {description && <p className="mt-1 text-sm text-stone-500">{description}</p>}
           {breakdown && (
             <p className="mt-2 text-xs text-stone-500 sm:text-sm">
-              {formatPrice(breakdown.unitPrice)}
-              {breakdown.nights && ` × ${breakdown.nights} Nächte`}
+              {formatPrice(breakdown.unitPrice, language)}
+              {breakdown.nights && ` × ${breakdown.nights} ${t(language, "nights")}`}
               {breakdown.count && ` × ${breakdown.count}`}
               {" = "}
-              {formatPrice(breakdown.total)}
+              {formatPrice(breakdown.total, language)}
             </p>
           )}
         </div>
@@ -217,9 +244,9 @@ function InstantCatalogItem({ item, count, onChange }) {
 
       <div className="flex items-center justify-between gap-4 sm:flex-shrink-0 sm:flex-col sm:items-end sm:gap-3">
         <div className="text-right">
-          <div className="text-lg font-semibold text-stone-900">{formatPrice(item.unitPrice)}</div>
-          {item.priceUnitLabel && (
-            <div className="text-xs uppercase tracking-wide text-stone-500">{item.priceUnitLabel}</div>
+          <div className="text-lg font-semibold text-stone-900">{formatPrice(item.unitPrice, language)}</div>
+          {priceUnitLabel && (
+            <div className="text-xs uppercase tracking-wide text-stone-500">{priceUnitLabel}</div>
           )}
         </div>
         <div className="flex items-center gap-3">
@@ -228,7 +255,7 @@ function InstantCatalogItem({ item, count, onChange }) {
             onClick={() => onChange(Math.max(0, count - 1))}
             disabled={count === 0}
             className="flex h-9 w-9 items-center justify-center rounded-full border border-stone-300 text-lg font-medium text-stone-600 transition hover:border-stone-400 hover:bg-stone-50 disabled:cursor-not-allowed disabled:opacity-40"
-            aria-label="Menge verringern"
+            aria-label={t(language, "decreaseQuantity")}
           >
             –
           </button>
@@ -237,7 +264,7 @@ function InstantCatalogItem({ item, count, onChange }) {
             type="button"
             onClick={() => onChange(count + 1)}
             className="flex h-9 w-9 items-center justify-center rounded-full bg-stone-900 text-lg font-medium text-white transition hover:bg-black"
-            aria-label="Menge erhöhen"
+            aria-label={t(language, "increaseQuantity")}
           >
             +
           </button>
@@ -247,12 +274,15 @@ function InstantCatalogItem({ item, count, onChange }) {
   );
 }
 
-function RequestCatalogItem({ item, reservationId, lastName, guestName }) {
+function RequestCatalogItem({ item, language, reservationId, lastName, guestName }) {
   // idle -> form -> submitting -> sent, or -> error (back to form)
   const [status, setStatus] = useState("idle");
   const [name, setName] = useState(guestName || "");
   const [email, setEmail] = useState("");
   const [error, setError] = useState("");
+  const displayName = item.displayName[language];
+  const description = item.description[language];
+  const priceUnitLabel = item.priceUnitLabel[language];
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -266,6 +296,7 @@ function RequestCatalogItem({ item, reservationId, lastName, guestName }) {
         guestEmail: email,
         serviceId: item.serviceId,
         quantity: 1,
+        language,
       });
       setStatus("sent");
     } catch (err) {
@@ -280,7 +311,7 @@ function RequestCatalogItem({ item, reservationId, lastName, guestName }) {
         <div className="h-16 w-16 flex-shrink-0 overflow-hidden rounded-md bg-stone-100 sm:h-20 sm:w-20">
           {item.imageUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={item.imageUrl} alt={item.displayName} className="h-full w-full object-cover" />
+            <img src={item.imageUrl} alt={displayName} className="h-full w-full object-cover" />
           ) : (
             <div className="flex h-full w-full items-center justify-center">
               <DefaultItemIcon />
@@ -289,34 +320,30 @@ function RequestCatalogItem({ item, reservationId, lastName, guestName }) {
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
-            <h3 className="text-base font-semibold text-stone-900 sm:text-lg">{item.displayName}</h3>
+            <h3 className={`${HEADING_CLASS} text-base text-stone-900 sm:text-lg`}>{displayName}</h3>
             <span className="rounded-full border border-stone-300 px-2 py-0.5 text-[11px] font-medium uppercase tracking-wide text-stone-500">
-              Auf Anfrage
+              {t(language, "onRequestBadge")}
             </span>
           </div>
-          {item.description && <p className="mt-1 text-sm text-stone-500">{item.description}</p>}
-          <p className="mt-2 text-xs text-stone-500 sm:text-sm">
-            Wir prüfen die Verfügbarkeit und melden uns bei Dir.
-          </p>
+          {description && <p className="mt-1 text-sm text-stone-500">{description}</p>}
+          <p className="mt-2 text-xs text-stone-500 sm:text-sm">{t(language, "requestExplanation")}</p>
         </div>
       </div>
 
       <div className="flex flex-col items-stretch gap-3 sm:w-64 sm:flex-shrink-0">
         {item.unitPrice && (
           <div className="text-right">
-            <div className="text-lg font-semibold text-stone-900">{formatPrice(item.unitPrice)}</div>
+            <div className="text-lg font-semibold text-stone-900">{formatPrice(item.unitPrice, language)}</div>
             <div className="text-xs uppercase tracking-wide text-stone-500">
-              {item.priceUnitLabel ? `${item.priceUnitLabel} · falls bestätigt` : "Falls bestätigt"}
+              {priceUnitLabel ? `${priceUnitLabel} · ${t(language, "ifConfirmed")}` : t(language, "ifConfirmed")}
             </div>
           </div>
         )}
 
         {status === "sent" ? (
           <div className="rounded-md border border-stone-200 bg-stone-50 px-3 py-2.5 text-sm text-stone-700">
-            <p className="font-medium text-stone-900">Deine Anfrage wurde gesendet.</p>
-            <p className="mt-0.5 text-xs text-stone-500">
-              Wir prüfen die Verfügbarkeit und melden uns bei Dir.
-            </p>
+            <p className="font-medium text-stone-900">{t(language, "requestSentTitle")}</p>
+            <p className="mt-0.5 text-xs text-stone-500">{t(language, "requestExplanation")}</p>
           </div>
         ) : status === "form" || status === "submitting" || status === "error" ? (
           <form onSubmit={handleSubmit} className="space-y-2">
@@ -325,24 +352,24 @@ function RequestCatalogItem({ item, reservationId, lastName, guestName }) {
               required
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="Dein Name"
+              placeholder={t(language, "requestNamePlaceholder")}
               className={`${INPUT_CLASS} py-2 text-sm`}
             />
             <input
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="E-Mail (optional)"
+              placeholder={t(language, "requestEmailPlaceholder")}
               className={`${INPUT_CLASS} py-2 text-sm`}
             />
             {status === "error" && <p className="text-xs text-red-600">{error}</p>}
             <button type="submit" disabled={status === "submitting"} className={`${SECONDARY_BUTTON} w-full`}>
-              {status === "submitting" ? "Wird gesendet…" : "Anfrage senden"}
+              {status === "submitting" ? t(language, "requestSendingButton") : t(language, "requestSendButton")}
             </button>
           </form>
         ) : (
           <button type="button" onClick={() => setStatus("form")} className={SECONDARY_BUTTON}>
-            Anfragen
+            {t(language, "requestButton")}
           </button>
         )}
       </div>
@@ -352,6 +379,7 @@ function RequestCatalogItem({ item, reservationId, lastName, guestName }) {
 
 function CatalogView({
   items,
+  language,
   cart,
   setCart,
   onBook,
@@ -386,6 +414,7 @@ function CatalogView({
           <InstantCatalogItem
             key={item.serviceId}
             item={item}
+            language={language}
             count={cart[item.serviceId] || 0}
             onChange={(next) => setCart((prev) => ({ ...prev, [item.serviceId]: next }))}
           />
@@ -394,6 +423,7 @@ function CatalogView({
           <RequestCatalogItem
             key={item.serviceId}
             item={item}
+            language={language}
             reservationId={reservationId}
             lastName={lastName}
             guestName={guestName}
@@ -408,20 +438,20 @@ function CatalogView({
               type="text"
               value={guestName}
               onChange={(e) => setGuestName(e.target.value)}
-              placeholder="Dein Name (für die Buchung)"
+              placeholder={t(language, "guestNamePlaceholder")}
               className={INPUT_CLASS}
             />
             <div className="flex flex-wrap items-baseline justify-between gap-2 text-sm text-stone-600">
+              <span>{translateExtraCount(language, totalCount)}</span>
               <span>
-                {totalCount} Extra{totalCount > 1 ? "s" : ""} ausgewählt
-              </span>
-              <span>
-                <span className="font-semibold text-stone-900">Gesamtpreis {formatPrice(totalPrice)}</span>
-                <span className="ml-1 text-xs text-stone-500">inkl. MwSt.</span>
+                <span className="font-semibold text-stone-900">
+                  {t(language, "totalPriceLabel")} {formatPrice(totalPrice, language)}
+                </span>
+                <span className="ml-1 text-xs text-stone-500">{t(language, "vatIncluded")}</span>
               </span>
             </div>
             <button onClick={onBook} disabled={booking} className={PRIMARY_BUTTON}>
-              {booking ? "Wird gebucht…" : "Jetzt buchen"}
+              {booking ? t(language, "bookingButton") : t(language, "bookNowButton")}
             </button>
           </div>
         </div>
@@ -430,34 +460,31 @@ function CatalogView({
   );
 }
 
-function Confirmation({ result, onRestart }) {
+function Confirmation({ language, result, onRestart }) {
   return (
     <div className="space-y-5 text-center sm:text-left">
       <CheckIcon />
       <div>
-        <h2 className="text-xl font-semibold text-stone-900 sm:text-2xl">Vielen Dank!</h2>
-        <p className="mt-1 text-stone-600">Deine Extras wurden erfolgreich zu Deiner Buchung hinzugefügt:</p>
+        <h2 className={`${HEADING_CLASS} text-xl text-stone-900 sm:text-2xl`}>{t(language, "confirmationTitle")}</h2>
+        <p className="mt-1 text-stone-600">{t(language, "confirmationBody")}</p>
       </div>
       <ul className="mx-auto max-w-sm space-y-2 text-left sm:mx-0">
         {result.booked.map((item, i) => (
           <li key={i} className="rounded-md border border-stone-200 bg-white px-4 py-3 text-stone-800">
-            {item.count}x {item.displayName}
+            {item.count}x {item.displayName[language]}
           </li>
         ))}
       </ul>
-      {result.failed?.length > 0 && (
-        <p className="text-sm text-amber-700">
-          Einige Positionen konnten nicht gebucht werden – bitte wende Dich für diese an die Rezeption.
-        </p>
-      )}
+      {result.failed?.length > 0 && <p className="text-sm text-amber-700">{t(language, "confirmationPartialFailure")}</p>}
       <button onClick={onRestart} className={SECONDARY_BUTTON}>
-        Neue Suche
+        {t(language, "restartButton")}
       </button>
     </div>
   );
 }
 
 export default function GuestApp() {
+  const [language, setLanguageState] = useState(DEFAULT_LANGUAGE);
   const [step, setStep] = useState("search");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -471,6 +498,38 @@ export default function GuestApp() {
   const [booking, setBooking] = useState(false);
   const [orderResult, setOrderResult] = useState(null);
 
+  // Language persistence: an explicit ?lang= wins on first load, otherwise
+  // whatever the guest picked on a previous visit (localStorage), otherwise
+  // German. Runs once on mount — switching language afterwards never
+  // re-triggers this, so it never resets the reservation/cart/step state.
+  useEffect(() => {
+    let initial = DEFAULT_LANGUAGE;
+    try {
+      const fromUrl = new URLSearchParams(window.location.search).get("lang");
+      const fromStorage = window.localStorage.getItem(LANGUAGE_STORAGE_KEY);
+      if (fromUrl && LANGUAGES.includes(fromUrl)) initial = fromUrl;
+      else if (fromStorage && LANGUAGES.includes(fromStorage)) initial = fromStorage;
+      else initial = DEFAULT_LANGUAGE;
+    } catch {
+      // localStorage can throw in some private-browsing modes — German
+      // default is a perfectly fine fallback.
+      initial = DEFAULT_LANGUAGE;
+    }
+    setLanguageState(initial);
+    document.documentElement.lang = initial;
+  }, []);
+
+  function setLanguage(next) {
+    setLanguageState(next);
+    document.documentElement.lang = next;
+    try {
+      window.localStorage.setItem(LANGUAGE_STORAGE_KEY, next);
+    } catch {
+      // Not persisting across reloads is fine — the switch still applies
+      // immediately for the rest of this session.
+    }
+  }
+
   async function loadCatalog(res, name) {
     setLoading(true);
     setError("");
@@ -478,12 +537,13 @@ export default function GuestApp() {
       const data = await postJSON("/api/guest/catalog", {
         reservationId: res.id,
         lastName: name,
+        language,
       });
       if (data.pastStay) {
-        setCatalogMessage(PAST_STAY_MESSAGE);
+        setCatalogMessage(t(language, "pastStayMessage"));
         setCatalogItems([]);
       } else if (!data.items.length) {
-        setCatalogMessage(NO_ITEMS_MESSAGE);
+        setCatalogMessage(t(language, "noItemsMessage"));
         setCatalogItems([]);
       } else {
         setCatalogMessage("");
@@ -504,7 +564,7 @@ export default function GuestApp() {
     setError("");
     setLastName(name);
     try {
-      const data = await postJSON("/api/guest/lookup", { number, lastName: name });
+      const data = await postJSON("/api/guest/lookup", { number, lastName: name, language });
       if (data.reservations.length === 1) {
         await loadCatalog(data.reservations[0], name);
       } else {
@@ -532,6 +592,7 @@ export default function GuestApp() {
         lastName,
         guestName,
         lines,
+        language,
       });
       setOrderResult(result);
       setStep("confirmation");
@@ -562,21 +623,24 @@ export default function GuestApp() {
           isWideStep ? "max-w-3xl lg:max-w-5xl" : "max-w-lg"
         }`}
       >
-        <div className="mb-10 flex justify-center sm:mb-14">
+        <div className="mb-4 flex justify-center">
           <BrandLogo src="/logo/unique-places-logo.png" alt="Unique Places" className="h-10 w-auto sm:h-12" />
+        </div>
+        <div className="mb-6 sm:mb-10">
+          <LanguageSwitcher language={language} onChange={setLanguage} />
         </div>
 
         <header className="mb-8 text-left">
-          <h1 className="text-2xl font-semibold text-stone-900 sm:text-3xl">Deine Extras</h1>
-          <p className="mt-2 text-sm text-stone-500 sm:text-base">
-            Füge ganz bequem Zusatzleistungen zu Deiner Reservierung hinzu.
-          </p>
+          <h1 className={`${HEADING_CLASS} text-2xl text-stone-900 sm:text-3xl`}>{t(language, "pageTitle")}</h1>
+          <p className="mt-2 text-sm text-stone-500 sm:text-base">{t(language, "pageSubtitle")}</p>
         </header>
 
-        {step === "search" && <SearchForm onSubmit={handleSearch} loading={loading} error={error} />}
+        {step === "search" && (
+          <SearchForm language={language} onSubmit={handleSearch} loading={loading} error={error} />
+        )}
 
         {step === "select-reservation" && (
-          <ReservationPicker reservations={reservations} onSelect={(r) => loadCatalog(r, lastName)} />
+          <ReservationPicker language={language} reservations={reservations} onSelect={(r) => loadCatalog(r, lastName)} />
         )}
 
         {step === "catalog" && (
@@ -587,6 +651,7 @@ export default function GuestApp() {
             ) : (
               <CatalogView
                 items={catalogItems}
+                language={language}
                 cart={cart}
                 setCart={setCart}
                 onBook={handleBook}
@@ -601,7 +666,7 @@ export default function GuestApp() {
         )}
 
         {step === "confirmation" && orderResult && (
-          <Confirmation result={orderResult} onRestart={handleRestart} />
+          <Confirmation language={language} result={orderResult} onRestart={handleRestart} />
         )}
       </main>
     </div>

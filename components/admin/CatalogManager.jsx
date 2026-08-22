@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { DEFAULT_PRICE_UNIT_LABELS } from "@/lib/priceDisplay";
+import { DEFAULT_PRICE_UNIT_LABELS, DEFAULT_PRICE_UNIT_LABELS_EN } from "@/lib/priceDisplay";
 
 const BOOKING_RULE_OPTIONS = [
   { value: "per_stay", label: "Einmal pro Aufenthalt" },
@@ -28,6 +28,12 @@ function emptyRow(service) {
     bookingRule: "per_stay",
     priceUnitLabel: "",
     fulfillmentMode: "instant",
+    displayNameDe: "",
+    displayNameEn: "",
+    descriptionDe: "",
+    descriptionEn: "",
+    priceUnitLabelDe: "",
+    priceUnitLabelEn: "",
   };
 }
 
@@ -215,6 +221,73 @@ export default function CatalogManager() {
                   className="mt-1 w-full rounded-md border border-slate-300 px-3 py-1.5 text-sm"
                 />
               </div>
+
+              <div className="sm:col-span-2">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                  Sprachspezifische Überschreibung (optional)
+                </p>
+                <p className="mt-0.5 text-xs text-slate-400">
+                  Wird nur verwendet, wenn ausgefüllt. Ohne Eintrag greift zuerst die passende Apaleo-Übersetzung,
+                  dann die obigen allgemeinen Felder.
+                </p>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-500">Anzeigename (Deutsch)</label>
+                <input
+                  type="text"
+                  value={row.displayNameDe || ""}
+                  onChange={(e) => updateRow(row.serviceId, { displayNameDe: e.target.value })}
+                  className="mt-1 w-full rounded-md border border-slate-300 px-3 py-1.5 text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-500">Anzeigename (Englisch)</label>
+                <input
+                  type="text"
+                  value={row.displayNameEn || ""}
+                  onChange={(e) => updateRow(row.serviceId, { displayNameEn: e.target.value })}
+                  className="mt-1 w-full rounded-md border border-slate-300 px-3 py-1.5 text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-500">Beschreibung (Deutsch)</label>
+                <textarea
+                  value={row.descriptionDe || ""}
+                  onChange={(e) => updateRow(row.serviceId, { descriptionDe: e.target.value })}
+                  rows={2}
+                  className="mt-1 w-full rounded-md border border-slate-300 px-3 py-1.5 text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-500">Beschreibung (Englisch)</label>
+                <textarea
+                  value={row.descriptionEn || ""}
+                  onChange={(e) => updateRow(row.serviceId, { descriptionEn: e.target.value })}
+                  rows={2}
+                  className="mt-1 w-full rounded-md border border-slate-300 px-3 py-1.5 text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-500">Preiseinheit (Deutsch)</label>
+                <input
+                  type="text"
+                  value={row.priceUnitLabelDe || ""}
+                  onChange={(e) => updateRow(row.serviceId, { priceUnitLabelDe: e.target.value })}
+                  placeholder={DEFAULT_PRICE_UNIT_LABELS[row.bookingRule || "per_stay"] || ""}
+                  className="mt-1 w-full rounded-md border border-slate-300 px-3 py-1.5 text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-500">Preiseinheit (Englisch)</label>
+                <input
+                  type="text"
+                  value={row.priceUnitLabelEn || ""}
+                  onChange={(e) => updateRow(row.serviceId, { priceUnitLabelEn: e.target.value })}
+                  placeholder={DEFAULT_PRICE_UNIT_LABELS_EN[row.bookingRule || "per_stay"] || ""}
+                  className="mt-1 w-full rounded-md border border-slate-300 px-3 py-1.5 text-sm"
+                />
+              </div>
+
               <div className="flex items-center gap-4 sm:col-span-2">
                 {row.imageUrl && (
                   // eslint-disable-next-line @next/next/no-img-element

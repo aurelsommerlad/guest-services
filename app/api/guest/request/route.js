@@ -1,9 +1,7 @@
 import { NextResponse } from "next/server";
-import { searchReservations, getGuestCatalog, GENERIC_LOOKUP_ERROR } from "@/lib/guest";
+import { searchReservations, getGuestCatalog, getLookupErrorMessage } from "@/lib/guest";
 import { createGuestRequest } from "@/lib/requests";
-
-const REQUEST_FAILED_MESSAGE =
-  "Deine Anfrage konnte nicht gesendet werden. Bitte versuche es erneut oder wende Dich an die Rezeption.";
+import { t } from "@/lib/i18n";
 
 export async function POST(request) {
   const body = await request.json().catch(() => null);
@@ -13,18 +11,16 @@ export async function POST(request) {
   const guestEmail = body?.guestEmail ? String(body.guestEmail).trim() : "";
   const serviceId = String(body?.serviceId || "").trim();
   const quantity = Number(body?.quantity) || 1;
+  const language = body?.language;
 
   if (!reservationId || !lastName || !serviceId || quantity <= 0) {
-    return NextResponse.json(
-      { error: "Bitte wähle eine Zusatzleistung aus, für die Du eine Anfrage senden möchtest." },
-      { status: 400 }
-    );
+    return NextResponse.json({ error: t(language, "selectRequestItemError") }, { status: 400 });
   }
 
   try {
     const [reservation] = await searchReservations(reservationId, lastName);
     if (!reservation) {
-      return NextResponse.json({ error: GENERIC_LOOKUP_ERROR }, { status: 404 });
+      return NextResponse.json({ error: getLookupErrorMessage(language) }, { status: 404 });
     }
 
     const propertyId = reservation.property?.id;
@@ -33,7 +29,7 @@ export async function POST(request) {
       (i) => i.serviceId === serviceId && (i.fulfillmentMode || "instant") === "request"
     );
     if (!item) {
-      return NextResponse.json({ error: REQUEST_FAILED_MESSAGE }, { status: 404 });
+      return NextResponse.json({ error: t(language, "requestFailedError") }, { status: 404 });
     }
 
     const record = await createGuestRequest({
@@ -52,6 +48,6 @@ export async function POST(request) {
     });
   } catch (err) {
     console.error("Fehler beim Senden der Extra-Anfrage:", err);
-    return NextResponse.json({ error: REQUEST_FAILED_MESSAGE }, { status: 502 });
+    return NextResponse.json({ error: t(language, "requestFailedError") }, { status: 502 });
   }
 }

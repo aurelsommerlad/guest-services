@@ -12,12 +12,16 @@ body {
 
 /*
  * Guest-facing frontend only — scoped so the admin area (which never uses
- * this class) keeps its original look untouched. Derived from screenshots
- * of unique-places.com's booking flow (the site itself is blocked by this
- * environment's network egress policy, so exact source values couldn't be
- * pulled) — swap --font-guest's source font in app/layout.js if the real
- * one is confirmed later.
+ * these classes) keeps its original look untouched. Body/UI text defaults
+ * to Roboto at weight 300; headings/titles use .guest-heading (Josefin
+ * Sans, weight 400) instead. See app/layout.js for the font registration.
  */
 .guest-shell {
-  font-family: var(--font-guest), sans-serif;
+  font-family: var(--font-body), sans-serif;
+  font-weight: 300;
+}
+
+.guest-heading {
+  font-family: var(--font-heading), sans-serif;
+  font-weight: 400;
 }
