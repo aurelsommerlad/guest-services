@@ -154,6 +154,7 @@ function SearchForm({ language, onSubmit, loading, error }) {
           placeholder={t(language, "searchNumberPlaceholder")}
           autoComplete="off"
         />
+        <p className="mt-1 text-xs text-stone-400">{t(language, "searchNumberHelperText")}</p>
       </div>
       <div>
         <label className={LABEL_CLASS} htmlFor="lastName">
