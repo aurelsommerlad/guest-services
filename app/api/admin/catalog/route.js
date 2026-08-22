@@ -37,6 +37,10 @@ export async function POST(request) {
     imageUrl: item.imageUrl || "",
     active: Boolean(item.active),
     bookingRule: BOOKING_RULES.includes(item.bookingRule) ? item.bookingRule : DEFAULT_BOOKING_RULE,
+    // Presentation only (see lib/priceDisplay.js) — stored as entered, or
+    // empty; the guest-facing fallback default is resolved at read time,
+    // not baked in here, so it stays correct if bookingRule changes later.
+    priceUnitLabel: typeof item.priceUnitLabel === "string" ? item.priceUnitLabel.trim() : "",
   });
 
   return NextResponse.json({ item: saved });

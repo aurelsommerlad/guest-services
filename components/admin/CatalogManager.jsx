@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { DEFAULT_PRICE_UNIT_LABELS } from "@/lib/priceDisplay";
 
 const BOOKING_RULE_OPTIONS = [
   { value: "per_stay", label: "Einmal pro Aufenthalt" },
@@ -20,6 +21,7 @@ function emptyRow(service) {
     imageUrl: "",
     active: false,
     bookingRule: "per_stay",
+    priceUnitLabel: "",
   };
 }
 
@@ -173,6 +175,16 @@ export default function CatalogManager() {
                     </option>
                   ))}
                 </select>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-500">Preiseinheit</label>
+                <input
+                  type="text"
+                  value={row.priceUnitLabel || ""}
+                  onChange={(e) => updateRow(row.serviceId, { priceUnitLabel: e.target.value })}
+                  placeholder={DEFAULT_PRICE_UNIT_LABELS[row.bookingRule || "per_stay"] || ""}
+                  className="mt-1 w-full rounded-md border border-slate-300 px-3 py-1.5 text-sm"
+                />
               </div>
               <div className="sm:col-span-2">
                 <label className="block text-xs font-medium text-slate-500">Beschreibung</label>

@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { formatDate, formatPrice } from "@/lib/format";
+import { computePriceBreakdown } from "@/lib/priceDisplay";
 
 const PAST_STAY_MESSAGE =
   "Diese Reservierung liegt bereits in der Vergangenheit. Über das Portal können daher keine weiteren Extras mehr gebucht werden – bitte wenden Sie sich an die Rezeption.";
@@ -101,6 +102,16 @@ function ReservationPicker({ reservations, onSelect }) {
 }
 
 function CatalogItem({ item, count, onChange }) {
+  // The unit price + its label in the top-right corner never changes with
+  // quantity — only this optional breakdown line, shown once the guest has
+  // selected at least one unit, reflects nights/quantity multiplication.
+  const breakdown = computePriceBreakdown({
+    unitPrice: item.unitPrice,
+    nights: item.nights,
+    price: item.price,
+    count,
+  });
+
   return (
     <div className="flex gap-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
       <div className="h-20 w-20 flex-shrink-0 overflow-hidden rounded-lg bg-slate-100">
@@ -116,16 +127,23 @@ function CatalogItem({ item, count, onChange }) {
       <div className="flex-1">
         <div className="flex items-start justify-between gap-2">
           <h3 className="font-semibold text-slate-800">{item.displayName}</h3>
-          <span className="whitespace-nowrap font-semibold text-brand-700">
-            {formatPrice(item.price)}
-          </span>
+          <div className="whitespace-nowrap text-right">
+            <div className="font-semibold text-brand-700">{formatPrice(item.unitPrice)}</div>
+            {item.priceUnitLabel && (
+              <div className="text-xs font-normal text-slate-500">{item.priceUnitLabel}</div>
+            )}
+          </div>
         </div>
         {item.description && (
           <p className="mt-1 text-sm text-slate-500">{item.description}</p>
         )}
-        {item.bookingRule === "per_night" && item.nights > 1 && (
+        {breakdown && (
           <p className="mt-1 text-xs text-slate-500">
-            {formatPrice(item.unitPrice)} × {item.nights} Nächte = {formatPrice(item.price)}
+            {formatPrice(breakdown.unitPrice)}
+            {breakdown.nights && ` × ${breakdown.nights} Nächte`}
+            {breakdown.count && ` × ${breakdown.count}`}
+            {" = "}
+            {formatPrice(breakdown.total)}
           </p>
         )}
         <div className="mt-3 flex items-center gap-3">
