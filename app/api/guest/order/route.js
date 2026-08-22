@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { searchReservations, placeGuestOrder, GENERIC_LOOKUP_ERROR } from "@/lib/guest";
 
 const BOOKING_FAILED_MESSAGE =
-  "Die Buchung konnte nicht durchgeführt werden. Bitte versuchen Sie es erneut oder wenden Sie sich an die Rezeption.";
+  "Die Buchung konnte nicht durchgeführt werden. Bitte versuche es erneut oder wende Dich an die Rezeption.";
 
 export async function POST(request) {
   const body = await request.json().catch(() => null);
@@ -13,7 +13,7 @@ export async function POST(request) {
 
   if (!reservationId || !lastName || !lines.length) {
     return NextResponse.json(
-      { error: "Bitte wählen Sie mindestens eine Zusatzleistung aus." },
+      { error: "Bitte wähle mindestens eine Zusatzleistung aus." },
       { status: 400 }
     );
   }

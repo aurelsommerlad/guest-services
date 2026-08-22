@@ -9,3 +9,15 @@ html {
 body {
   min-height: 100vh;
 }
+
+/*
+ * Guest-facing frontend only — scoped so the admin area (which never uses
+ * this class) keeps its original look untouched. Derived from screenshots
+ * of unique-places.com's booking flow (the site itself is blocked by this
+ * environment's network egress policy, so exact source values couldn't be
+ * pulled) — swap --font-guest's source font in app/layout.js if the real
+ * one is confirmed later.
+ */
+.guest-shell {
+  font-family: var(--font-guest), sans-serif;
+}

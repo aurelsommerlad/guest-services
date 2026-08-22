@@ -32,7 +32,7 @@ export async function POST(request) {
   } catch (err) {
     console.error("Fehler bei der Reservierungssuche:", err);
     return NextResponse.json(
-      { error: "Die Suche ist aktuell nicht möglich. Bitte versuchen Sie es später erneut oder wenden Sie sich an die Rezeption." },
+      { error: "Die Suche ist aktuell nicht möglich. Bitte versuche es später erneut oder wende Dich an die Rezeption." },
       { status: 502 }
     );
   }

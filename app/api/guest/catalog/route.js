@@ -24,7 +24,7 @@ export async function POST(request) {
   } catch (err) {
     console.error("Fehler beim Laden des Extras-Katalogs:", err);
     return NextResponse.json(
-      { error: "Der Extras-Katalog konnte nicht geladen werden. Bitte versuchen Sie es später erneut." },
+      { error: "Der Extras-Katalog konnte nicht geladen werden. Bitte versuche es später erneut." },
       { status: 502 }
     );
   }
