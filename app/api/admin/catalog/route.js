@@ -7,6 +7,8 @@ import {
   DEFAULT_BOOKING_RULE,
   FULFILLMENT_MODES,
   DEFAULT_FULFILLMENT_MODE,
+  ACTION_TYPES,
+  DEFAULT_ACTION_TYPE,
 } from "@/lib/store";
 
 export async function GET(request) {
@@ -54,6 +56,15 @@ export async function POST(request) {
     ? item.allowedUnitGroupIds.filter((id) => typeof id === "string" && id.trim()).map((id) => id.trim())
     : [];
 
+  const actionType = ACTION_TYPES.includes(item.actionType) ? item.actionType : DEFAULT_ACTION_TYPE;
+  // "increase_occupancy" items (e.g. "Extra person"/"Zusatzperson") amend
+  // the reservation's adult count directly (see lib/occupancyAmendment.js)
+  // instead of booking an Apaleo service — capacity-gating and instant
+  // fulfillment aren't business preferences for this action type, they're
+  // physical/logical necessities, so both are forced here rather than left
+  // independently configurable by the admin.
+  const isOccupancyIncrease = actionType === "increase_occupancy";
+
   const saved = await upsertCatalogItem(propertyId, {
     serviceId: item.serviceId,
     code: item.code || "",
@@ -68,9 +79,17 @@ export async function POST(request) {
     // empty; the guest-facing fallback default is resolved at read time,
     // not baked in here, so it stays correct if bookingRule changes later.
     priceUnitLabel: optionalText(item.priceUnitLabel),
-    fulfillmentMode: FULFILLMENT_MODES.includes(item.fulfillmentMode)
+    fulfillmentMode: isOccupancyIncrease
+      ? "instant"
+      : FULFILLMENT_MODES.includes(item.fulfillmentMode)
       ? item.fulfillmentMode
       : DEFAULT_FULFILLMENT_MODE,
+    actionType,
+    // Only meaningful for actionType "increase_occupancy" — the surcharge
+    // added per additional guest per night (see
+    // lib/occupancyAmendment.js's buildExtraPersonPricing). null/absent for
+    // ordinary "service" items.
+    extraPersonPricePerNight: isOccupancyIncrease ? optionalNumber(item.extraPersonPricePerNight) : null,
     // Optional per-language overrides (see lib/catalogLocalization.js for
     // how these fit into the guest-facing fallback chain). All optional —
     // an empty string here just means "no override for this language",
@@ -85,8 +104,9 @@ export async function POST(request) {
     sortOrder: optionalNumber(item.sortOrder),
     // Default false = current behavior (see lib/capacity.js) — only true
     // hides the extra once the booked unit group has no remaining guest
-    // capacity, e.g. "Extra person"/"Zusatzperson".
-    requiresRemainingCapacity: Boolean(item.requiresRemainingCapacity),
+    // capacity. Forced true for "increase_occupancy" items regardless of
+    // what the admin form sent — see isOccupancyIncrease above.
+    requiresRemainingCapacity: isOccupancyIncrease ? true : Boolean(item.requiresRemainingCapacity),
   });
 
   return NextResponse.json({ item: saved });

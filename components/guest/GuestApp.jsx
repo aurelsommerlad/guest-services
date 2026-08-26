@@ -300,6 +300,11 @@ function InstantCatalogItem({ item, language, count, onChange }) {
               </p>
             )
           )}
+          {!restricted && item.actionType === "increase_occupancy" && count > 0 && (
+            <p className="mt-2 text-xs font-medium text-stone-600 sm:text-sm">
+              {t(language, "extraPersonAmendmentNotice")}
+            </p>
+          )}
         </div>
       </div>
 

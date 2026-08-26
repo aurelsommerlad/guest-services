@@ -47,7 +47,13 @@ test("resolvePriceUnitLabel: English defaults per bookingRule when unset", () =>
     per_stay: "per stay",
     arrival_day: "one-time",
     departure_day: "one-time",
+    per_person_per_night: "per person / night",
   });
+});
+
+test("resolvePriceUnitLabel: per_person_per_night default (actionType increase_occupancy, e.g. 'Extra person')", () => {
+  assert.equal(resolvePriceUnitLabel("per_person_per_night", undefined), "pro Person / Nacht");
+  assert.equal(resolvePriceUnitLabel("per_person_per_night", undefined, "en"), "per person / night");
 });
 
 test("resolvePriceUnitLabel: a custom label wins regardless of requested language", () => {

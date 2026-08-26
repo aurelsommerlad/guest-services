@@ -15,6 +15,18 @@ const FULFILLMENT_MODE_OPTIONS = [
   { value: "request", label: "Auf Anfrage" },
 ];
 
+// "increase_occupancy" (e.g. "Extra person"/"Zusatzperson") never books an
+// Apaleo service — it amends the reservation's adult count and
+// accommodation price directly (see lib/occupancyAmendment.js). Capacity
+// gating and instant fulfillment are forced server-side for this type
+// regardless of the checkbox/select values below (see
+// app/api/admin/catalog/route.js), so the UI shows that as an
+// informational note rather than an editable control.
+const ACTION_TYPE_OPTIONS = [
+  { value: "service", label: "Standard-Service" },
+  { value: "increase_occupancy", label: "Personenanzahl erhöhen" },
+];
+
 function emptyRow(service) {
   return {
     serviceId: service.id,
@@ -37,6 +49,8 @@ function emptyRow(service) {
     allowedUnitGroupIds: [],
     sortOrder: null,
     requiresRemainingCapacity: false,
+    actionType: "service",
+    extraPersonPricePerNight: null,
   };
 }
 
@@ -189,6 +203,44 @@ export default function CatalogManager() {
                 />
               </div>
               <div>
+                <label className="block text-xs font-medium text-slate-500">Aktionstyp</label>
+                <select
+                  value={row.actionType || "service"}
+                  onChange={(e) => updateRow(row.serviceId, { actionType: e.target.value })}
+                  className="mt-1 w-full rounded-md border border-slate-300 px-3 py-1.5 text-sm"
+                >
+                  {ACTION_TYPE_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+                <p className="mt-0.5 text-xs text-slate-400">
+                  „Personenanzahl erhöhen“ bucht keinen Apaleo-Service, sondern erhöht die
+                  Erwachsenenanzahl der Reservierung direkt (z. B. „Zusatzperson“).
+                </p>
+              </div>
+              {row.actionType === "increase_occupancy" && (
+                <div>
+                  <label className="block text-xs font-medium text-slate-500">
+                    Preis pro zusätzlicher Person / Nacht (€)
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={row.extraPersonPricePerNight ?? ""}
+                    onChange={(e) =>
+                      updateRow(row.serviceId, {
+                        extraPersonPricePerNight: e.target.value === "" ? null : Number(e.target.value),
+                      })
+                    }
+                    placeholder="z. B. 30.00"
+                    className="mt-1 w-full rounded-md border border-slate-300 px-3 py-1.5 text-sm"
+                  />
+                </div>
+              )}
+              <div>
                 <label className="block text-xs font-medium text-slate-500">Reihenfolge</label>
                 <input
                   type="number"
@@ -203,34 +255,45 @@ export default function CatalogManager() {
                   Steuert die Reihenfolge im Gäste-Portal (aufsteigend). Ohne Wert erscheint das Extra zuletzt.
                 </p>
               </div>
-              <div>
-                <label className="block text-xs font-medium text-slate-500">Berechnung</label>
-                <select
-                  value={row.bookingRule || "per_stay"}
-                  onChange={(e) => updateRow(row.serviceId, { bookingRule: e.target.value })}
-                  className="mt-1 w-full rounded-md border border-slate-300 px-3 py-1.5 text-sm"
-                >
-                  {BOOKING_RULE_OPTIONS.map((opt) => (
-                    <option key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-slate-500">Buchungsart</label>
-                <select
-                  value={row.fulfillmentMode || "instant"}
-                  onChange={(e) => updateRow(row.serviceId, { fulfillmentMode: e.target.value })}
-                  className="mt-1 w-full rounded-md border border-slate-300 px-3 py-1.5 text-sm"
-                >
-                  {FULFILLMENT_MODE_OPTIONS.map((opt) => (
-                    <option key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
+              {row.actionType !== "increase_occupancy" && (
+                <div>
+                  <label className="block text-xs font-medium text-slate-500">Berechnung</label>
+                  <select
+                    value={row.bookingRule || "per_stay"}
+                    onChange={(e) => updateRow(row.serviceId, { bookingRule: e.target.value })}
+                    className="mt-1 w-full rounded-md border border-slate-300 px-3 py-1.5 text-sm"
+                  >
+                    {BOOKING_RULE_OPTIONS.map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+              {row.actionType === "increase_occupancy" ? (
+                <div>
+                  <p className="block text-xs font-medium text-slate-500">Buchungsart</p>
+                  <p className="mt-1 text-sm text-slate-500">
+                    Immer direkt buchbar (Reservierungsänderung, keine Anfrage möglich).
+                  </p>
+                </div>
+              ) : (
+                <div>
+                  <label className="block text-xs font-medium text-slate-500">Buchungsart</label>
+                  <select
+                    value={row.fulfillmentMode || "instant"}
+                    onChange={(e) => updateRow(row.serviceId, { fulfillmentMode: e.target.value })}
+                    className="mt-1 w-full rounded-md border border-slate-300 px-3 py-1.5 text-sm"
+                  >
+                    {FULFILLMENT_MODE_OPTIONS.map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
               <div>
                 <label className="block text-xs font-medium text-slate-500">Preiseinheit</label>
                 <input
@@ -242,18 +305,27 @@ export default function CatalogManager() {
                 />
               </div>
               <div className="sm:col-span-2">
-                <label className="flex items-center gap-2 text-sm text-slate-700">
-                  <input
-                    type="checkbox"
-                    checked={Boolean(row.requiresRemainingCapacity)}
-                    onChange={(e) => updateRow(row.serviceId, { requiresRemainingCapacity: e.target.checked })}
-                  />
-                  Nur bei freier Personenkapazität anzeigen
-                </label>
-                <p className="mt-0.5 text-xs text-slate-400">
-                  Zeigt dieses Extra nur, solange die gebuchte Apartmentkapazität noch nicht durch
-                  Erwachsene und Kinder ausgeschöpft ist (z. B. „Zusatzperson“).
-                </p>
+                {row.actionType === "increase_occupancy" ? (
+                  <p className="text-sm text-slate-500">
+                    Kapazitätsprüfung ist für „Personenanzahl erhöhen“ immer aktiv — das Extra wird nur
+                    angezeigt und ist nur so oft wählbar, wie in der gebuchten Apartmentkapazität noch Platz ist.
+                  </p>
+                ) : (
+                  <>
+                    <label className="flex items-center gap-2 text-sm text-slate-700">
+                      <input
+                        type="checkbox"
+                        checked={Boolean(row.requiresRemainingCapacity)}
+                        onChange={(e) => updateRow(row.serviceId, { requiresRemainingCapacity: e.target.checked })}
+                      />
+                      Nur bei freier Personenkapazität anzeigen
+                    </label>
+                    <p className="mt-0.5 text-xs text-slate-400">
+                      Zeigt dieses Extra nur, solange die gebuchte Apartmentkapazität noch nicht durch
+                      Erwachsene und Kinder ausgeschöpft ist.
+                    </p>
+                  </>
+                )}
               </div>
               <div className="sm:col-span-2">
                 <label className="block text-xs font-medium text-slate-500">Beschreibung</label>
