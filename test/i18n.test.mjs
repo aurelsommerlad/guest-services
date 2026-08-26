@@ -46,6 +46,13 @@ test("t() returns the correct translation per language for representative guest-
       "Für diese Buchung ist keine weitere Person mehr möglich.",
       "No additional guest can be added to this booking.",
     ],
+    ["licensePlateLabel", "Kennzeichen", "License plate"],
+    ["licensePlatePlaceholder", "z. B. LI-UP 123", "e.g. LI-UP 123"],
+    [
+      "licensePlateRequiredError",
+      "Bitte gib das Kennzeichen des Fahrzeugs an.",
+      "Please enter the vehicle's license plate.",
+    ],
   ];
   for (const [key, de, en] of pairs) {
     assert.equal(t("de", key), de, `de.${key}`);

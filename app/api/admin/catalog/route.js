@@ -107,6 +107,11 @@ export async function POST(request) {
     // capacity. Forced true for "increase_occupancy" items regardless of
     // what the admin form sent — see isOccupancyIncrease above.
     requiresRemainingCapacity: isOccupancyIncrease ? true : Boolean(item.requiresRemainingCapacity),
+    // Default false = current behavior (see lib/vehicleRegistration.js) —
+    // only true requires the guest to enter a license plate per unit before
+    // this item can be booked (e.g. parking). Independent of actionType and
+    // never inferred from the service's name/code.
+    requiresVehicleRegistration: Boolean(item.requiresVehicleRegistration),
   });
 
   return NextResponse.json({ item: saved });

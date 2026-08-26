@@ -51,6 +51,7 @@ function emptyRow(service) {
     requiresRemainingCapacity: false,
     actionType: "service",
     extraPersonPricePerNight: null,
+    requiresVehicleRegistration: false,
   };
 }
 
@@ -326,6 +327,20 @@ export default function CatalogManager() {
                     </p>
                   </>
                 )}
+              </div>
+              <div className="sm:col-span-2">
+                <label className="flex items-center gap-2 text-sm text-slate-700">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(row.requiresVehicleRegistration)}
+                    onChange={(e) => updateRow(row.serviceId, { requiresVehicleRegistration: e.target.checked })}
+                  />
+                  Kennzeichen erforderlich
+                </label>
+                <p className="mt-0.5 text-xs text-slate-400">
+                  Der Gast muss vor der Buchung ein Kennzeichen je gewählter Menge angeben (z. B. Parkplatz). Wird
+                  auf primaryGuest.vehicleRegistration in Apaleo gespeichert.
+                </p>
               </div>
               <div className="sm:col-span-2">
                 <label className="block text-xs font-medium text-slate-500">Beschreibung</label>

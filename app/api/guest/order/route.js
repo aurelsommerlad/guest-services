@@ -28,19 +28,20 @@ export async function POST(request) {
     });
 
     if (!result.booked.length) {
-      // A dedicated, specific message for the one failure reason that's
-      // allowed to say more (see lib/guest.js's placeGuestOrder) — the
-      // guest already selected a quantity the catalog said was valid; if
-      // remaining capacity changed since then, they deserve a clearer
-      // explanation than the generic booking-failed wording.
+      // Dedicated, specific messages for failure reasons that are allowed
+      // to say more than the generic booking-failed wording (see
+      // lib/guest.js's placeGuestOrder) — a missing/incomplete license
+      // plate is a guest input problem (400), distinct from a capacity
+      // conflict (409) or an upstream Apaleo failure (502, the default).
       const capacityExceeded = result.failed.some((f) => f.reason === "capacity_exceeded");
-      return NextResponse.json(
-        {
-          error: t(language, capacityExceeded ? "capacityExceededError" : "bookingFailedError"),
-          failed: result.failed,
-        },
-        { status: capacityExceeded ? 409 : 502 }
-      );
+      const licensePlateRequired = result.failed.some((f) => f.reason === "vehicle_registration_required");
+      const status = capacityExceeded ? 409 : licensePlateRequired ? 400 : 502;
+      const messageKey = capacityExceeded
+        ? "capacityExceededError"
+        : licensePlateRequired
+        ? "licensePlateRequiredError"
+        : "bookingFailedError";
+      return NextResponse.json({ error: t(language, messageKey), failed: result.failed }, { status });
     }
 
     return NextResponse.json(result);

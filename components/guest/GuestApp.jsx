@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { formatDate, formatPrice } from "@/lib/format";
 import { computePriceBreakdown } from "@/lib/priceDisplay";
 import { LANGUAGES, DEFAULT_LANGUAGE, t, translateExtraCount, translateGuestCounts } from "@/lib/i18n";
+import { resizeVehiclePlates, hasCompleteVehiclePlates } from "@/lib/vehicleRegistration";
 
 const LANGUAGE_STORAGE_KEY = "guestLanguage";
 
@@ -250,7 +251,7 @@ function ReservationPicker({ language, reservations, onSelect }) {
   );
 }
 
-function InstantCatalogItem({ item, language, count, onChange }) {
+function InstantCatalogItem({ item, language, count, onChange, plates, onPlateChange }) {
   const restricted = item.unitGroupRestricted;
   // maxQuantity is only ever set for requiresRemainingCapacity items (e.g.
   // "Extra person") — null/undefined for every other item, so this never
@@ -304,6 +305,32 @@ function InstantCatalogItem({ item, language, count, onChange }) {
             <p className="mt-2 text-xs font-medium text-stone-600 sm:text-sm">
               {t(language, "extraPersonAmendmentNotice")}
             </p>
+          )}
+          {!restricted && item.requiresVehicleRegistration && count > 0 && (
+            <div className="mt-3 space-y-2.5">
+              {Array.from({ length: count }).map((_, i) => {
+                const value = plates?.[i] || "";
+                const showRequiredHint = !value.trim();
+                return (
+                  <div key={i}>
+                    <label className="block text-xs font-medium text-stone-500">
+                      {count > 1 ? `${t(language, "licensePlateLabel")} ${i + 1}` : t(language, "licensePlateLabel")}
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={value}
+                      onChange={(e) => onPlateChange(i, e.target.value)}
+                      placeholder={t(language, "licensePlatePlaceholder")}
+                      className={`mt-1 w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm text-stone-900 placeholder:text-stone-400 focus:border-stone-900 focus:outline-none focus:ring-1 focus:ring-stone-900`}
+                    />
+                    {showRequiredHint && (
+                      <p className="mt-1 text-xs text-amber-700">{t(language, "licensePlateRequiredError")}</p>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
           )}
         </div>
       </div>
@@ -459,7 +486,9 @@ function CatalogView({
   items,
   language,
   cart,
-  setCart,
+  onQuantityChange,
+  vehiclePlates,
+  onPlateChange,
   onBook,
   booking,
   guestName,
@@ -485,6 +514,15 @@ function CatalogView({
     return { totalCount: count, totalPrice: { amount: Math.round(amount * 100) / 100, currency } };
   }, [instantItems, cart]);
 
+  // Booking-safety gate mirrored server-side (see lib/guest.js's
+  // placeGuestOrder / lib/vehicleRegistration.js) — this is guest-side
+  // convenience only, never the authoritative check.
+  const hasIncompletePlates = instantItems.some((item) => {
+    if (!item.requiresVehicleRegistration) return false;
+    const count = cart[item.serviceId] || 0;
+    return !hasCompleteVehiclePlates(vehiclePlates[item.serviceId], count);
+  });
+
   return (
     <div className="space-y-4 pb-64 sm:pb-56">
       <div className="space-y-3">
@@ -494,7 +532,9 @@ function CatalogView({
             item={item}
             language={language}
             count={cart[item.serviceId] || 0}
-            onChange={(next) => setCart((prev) => ({ ...prev, [item.serviceId]: next }))}
+            onChange={(next) => onQuantityChange(item, next)}
+            plates={vehiclePlates[item.serviceId]}
+            onPlateChange={(index, value) => onPlateChange(item.serviceId, index, value)}
           />
         ))}
         {requestItems.map((item) => (
@@ -528,7 +568,7 @@ function CatalogView({
                 <span className="ml-1 text-xs text-stone-500">{t(language, "vatIncluded")}</span>
               </span>
             </div>
-            <button onClick={onBook} disabled={booking} className={PRIMARY_BUTTON}>
+            <button onClick={onBook} disabled={booking || hasIncompletePlates} className={PRIMARY_BUTTON}>
               {booking ? t(language, "bookingButton") : t(language, "bookNowButton")}
             </button>
           </div>
@@ -572,6 +612,9 @@ export default function GuestApp() {
   const [catalogItems, setCatalogItems] = useState([]);
   const [catalogMessage, setCatalogMessage] = useState("");
   const [cart, setCart] = useState({});
+  // { [serviceId]: string[] } — only populated for requiresVehicleRegistration
+  // items (e.g. parking); see lib/vehicleRegistration.js.
+  const [vehiclePlates, setVehiclePlates] = useState({});
   const [guestName, setGuestName] = useState("");
   const [booking, setBooking] = useState(false);
   const [orderResult, setOrderResult] = useState(null);
@@ -656,10 +699,39 @@ export default function GuestApp() {
     }
   }
 
+  // Keeps cart quantity and per-item license-plate fields in lockstep — see
+  // lib/vehicleRegistration.js's resizeVehiclePlates for the exact
+  // preserve/grow/shrink rules (pre-fills index 0 from the reservation's
+  // existing plate, drops trailing entries safely on a lower quantity).
+  function handleQuantityChange(item, next) {
+    setCart((prev) => ({ ...prev, [item.serviceId]: next }));
+    if (item.requiresVehicleRegistration) {
+      setVehiclePlates((prev) => ({
+        ...prev,
+        [item.serviceId]: resizeVehiclePlates(prev[item.serviceId], next, item.existingVehicleRegistration),
+      }));
+    }
+  }
+
+  function handlePlateChange(serviceId, index, value) {
+    setVehiclePlates((prev) => {
+      const next = [...(prev[serviceId] || [])];
+      next[index] = value;
+      return { ...prev, [serviceId]: next };
+    });
+  }
+
   async function handleBook() {
     const lines = Object.entries(cart)
       .filter(([, count]) => count > 0)
-      .map(([serviceId, count]) => ({ serviceId, count }));
+      .map(([serviceId, count]) => {
+        const item = catalogItems.find((i) => i.serviceId === serviceId);
+        const line = { serviceId, count };
+        if (item?.requiresVehicleRegistration) {
+          line.vehiclePlates = (vehiclePlates[serviceId] || []).map((p) => p.trim());
+        }
+        return line;
+      });
     if (!lines.length) return;
 
     setBooking(true);
@@ -688,6 +760,7 @@ export default function GuestApp() {
     setCatalogItems([]);
     setCatalogMessage("");
     setCart({});
+    setVehiclePlates({});
     setOrderResult(null);
     setError("");
   }
@@ -733,7 +806,9 @@ export default function GuestApp() {
                 items={catalogItems}
                 language={language}
                 cart={cart}
-                setCart={setCart}
+                onQuantityChange={handleQuantityChange}
+                vehiclePlates={vehiclePlates}
+                onPlateChange={handlePlateChange}
                 onBook={handleBook}
                 booking={booking}
                 guestName={guestName}
