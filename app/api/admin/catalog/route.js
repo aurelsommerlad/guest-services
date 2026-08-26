@@ -38,6 +38,15 @@ export async function POST(request) {
     return typeof value === "string" ? value.trim() : "";
   }
 
+  // Empty/undefined = "no explicit order, sort after configured items" (see
+  // lib/catalogSort.js) — anything non-numeric is dropped to null rather
+  // than stored as garbage that could sort unpredictably.
+  function optionalNumber(value) {
+    if (value === "" || value === null || value === undefined) return null;
+    const num = Number(value);
+    return Number.isFinite(num) ? num : null;
+  }
+
   // Empty/undefined = unrestricted (see lib/unitGroupRestriction.js) —
   // anything not a non-empty string is dropped rather than stored as
   // garbage that could accidentally restrict an extra to nothing.
@@ -73,6 +82,7 @@ export async function POST(request) {
     priceUnitLabelDe: optionalText(item.priceUnitLabelDe),
     priceUnitLabelEn: optionalText(item.priceUnitLabelEn),
     allowedUnitGroupIds,
+    sortOrder: optionalNumber(item.sortOrder),
   });
 
   return NextResponse.json({ item: saved });

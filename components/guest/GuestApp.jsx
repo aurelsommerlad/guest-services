@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { formatDate, formatPrice } from "@/lib/format";
 import { computePriceBreakdown } from "@/lib/priceDisplay";
-import { LANGUAGES, DEFAULT_LANGUAGE, t, translateExtraCount } from "@/lib/i18n";
+import { LANGUAGES, DEFAULT_LANGUAGE, t, translateExtraCount, translateGuestCounts } from "@/lib/i18n";
 
 const LANGUAGE_STORAGE_KEY = "guestLanguage";
 
@@ -108,6 +108,55 @@ function LanguageSwitcher({ language, onChange }) {
           </button>
         </span>
       ))}
+    </div>
+  );
+}
+
+// A minimal thin-stroke arrow connecting arrival → departure — deliberately
+// not an emoji/text arrow so the stroke weight/color can match the
+// surrounding Roboto 300 date text exactly (currentColor, no fill, no
+// circle/background). See ReservationSummary below.
+function ArrowIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 10"
+      width="22"
+      height="10"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1"
+      className="flex-shrink-0"
+      aria-hidden="true"
+    >
+      <line x1="0" y1="5" x2="19" y2="5" />
+      <path d="M14 1 L19 5 L14 9" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+// Compact reservation summary shown once the guest's reservation has been
+// identified — property name, guest name, adult/child counts, and
+// arrival/departure — deliberately restrained (no card, no icons besides
+// the arrow, no labels like "Gast"/"Anreise"/"Abreise") so it reads as part
+// of the page rather than a generic app widget. `reservation` here is
+// exactly what /api/guest/lookup already returned (see
+// lib/reservationSummary.js) — no extra request.
+function ReservationSummary({ language, reservation }) {
+  if (!reservation) return null;
+  const { propertyName, guestName, adults, children, arrival, departure } = reservation;
+
+  return (
+    <div className="mb-8 space-y-1.5 text-center sm:text-left">
+      {propertyName && (
+        <p className={`${HEADING_CLASS} text-lg text-stone-900 sm:text-xl`}>{propertyName}</p>
+      )}
+      {guestName && <p className="text-sm text-stone-600">{guestName}</p>}
+      <p className="text-sm text-stone-500">{translateGuestCounts(language, adults, children)}</p>
+      <div className="flex items-center justify-center gap-2 text-sm text-stone-500 sm:justify-start">
+        <span>{formatDate(arrival, language)}</span>
+        <ArrowIcon />
+        <span>{formatDate(departure, language)}</span>
+      </div>
     </div>
   );
 }
@@ -649,6 +698,8 @@ export default function GuestApp() {
         <div className="mb-6 sm:mb-10">
           <LanguageSwitcher language={language} onChange={setLanguage} />
         </div>
+
+        <ReservationSummary language={language} reservation={reservation} />
 
         <header className="mb-8 text-left">
           <h1 className={`${HEADING_CLASS} text-2xl text-stone-900 sm:text-3xl`}>{t(language, "pageTitle")}</h1>

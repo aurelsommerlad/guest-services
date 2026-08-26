@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
-import { getDepartureDate, isPastDate } from "@/lib/apaleo";
+import { getDepartureDate, isPastDate, pickLocalizedText } from "@/lib/apaleo";
 import { searchReservationsByAnyReference, getLookupErrorMessage, getAmbiguousLookupErrorMessage } from "@/lib/guest";
 import { checkRateLimit } from "@/lib/rateLimit";
+import { buildReservationSummary } from "@/lib/reservationSummary";
 import { t } from "@/lib/i18n";
 
 function clientIp(request) {
@@ -57,6 +58,9 @@ export async function POST(request) {
         departure: getDepartureDate(r),
         status: r.status || null,
         pastStay: isPastDate(getDepartureDate(r)),
+        // Compact reservation summary (see components/guest/GuestApp.jsx) —
+        // only safe, already-fetched fields, no extra Apaleo request.
+        ...buildReservationSummary(r, pickLocalizedText(r.property?.name)),
       })),
     });
   } catch (err) {

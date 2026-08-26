@@ -3,7 +3,15 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { LANGUAGES, DEFAULT_LANGUAGE, resolveLanguage, translations, t, translateExtraCount } from "../lib/i18n.js";
+import {
+  LANGUAGES,
+  DEFAULT_LANGUAGE,
+  resolveLanguage,
+  translations,
+  t,
+  translateExtraCount,
+  translateGuestCounts,
+} from "../lib/i18n.js";
 
 test("default language is German", () => {
   assert.equal(DEFAULT_LANGUAGE, "de");
@@ -57,6 +65,32 @@ test("translateExtraCount pluralizes per language", () => {
   assert.equal(translateExtraCount("de", 2), "2 Extras ausgewählt");
   assert.equal(translateExtraCount("en", 1), "1 extra selected");
   assert.equal(translateExtraCount("en", 3), "3 extras selected");
+});
+
+test("translateGuestCounts: adult pluralization in German", () => {
+  assert.equal(translateGuestCounts("de", 1, 0), "1 Erwachsener");
+  assert.equal(translateGuestCounts("de", 2, 0), "2 Erwachsene");
+});
+
+test("translateGuestCounts: adult pluralization in English", () => {
+  assert.equal(translateGuestCounts("en", 1, 0), "1 Adult");
+  assert.equal(translateGuestCounts("en", 2, 0), "2 Adults");
+});
+
+test("translateGuestCounts: child pluralization in German, appended with a middle dot", () => {
+  assert.equal(translateGuestCounts("de", 2, 1), "2 Erwachsene · 1 Kind");
+  assert.equal(translateGuestCounts("de", 2, 2), "2 Erwachsene · 2 Kinder");
+});
+
+test("translateGuestCounts: child pluralization in English, appended with a middle dot", () => {
+  assert.equal(translateGuestCounts("en", 2, 1), "2 Adults · 1 Child");
+  assert.equal(translateGuestCounts("en", 2, 3), "2 Adults · 3 Children");
+});
+
+test("translateGuestCounts: no children at all means only the adults count is shown, never '0 Kinder'/'0 Children'", () => {
+  assert.equal(translateGuestCounts("de", 2, 0), "2 Erwachsene");
+  assert.equal(translateGuestCounts("en", 2, 0), "2 Adults");
+  assert.equal(translateGuestCounts("de", 2, undefined), "2 Erwachsene");
 });
 
 test("every key present in the German dictionary also exists in English (no silent gaps)", () => {

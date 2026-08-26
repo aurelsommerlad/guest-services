@@ -35,6 +35,7 @@ function emptyRow(service) {
     priceUnitLabelDe: "",
     priceUnitLabelEn: "",
     allowedUnitGroupIds: [],
+    sortOrder: null,
   };
 }
 
@@ -185,6 +186,21 @@ export default function CatalogManager() {
                   onChange={(e) => updateRow(row.serviceId, { category: e.target.value })}
                   className="mt-1 w-full rounded-md border border-slate-300 px-3 py-1.5 text-sm"
                 />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-500">Reihenfolge</label>
+                <input
+                  type="number"
+                  value={row.sortOrder ?? ""}
+                  onChange={(e) =>
+                    updateRow(row.serviceId, { sortOrder: e.target.value === "" ? null : Number(e.target.value) })
+                  }
+                  placeholder="z. B. 10"
+                  className="mt-1 w-full rounded-md border border-slate-300 px-3 py-1.5 text-sm"
+                />
+                <p className="mt-0.5 text-xs text-slate-400">
+                  Steuert die Reihenfolge im Gäste-Portal (aufsteigend). Ohne Wert erscheint das Extra zuletzt.
+                </p>
               </div>
               <div>
                 <label className="block text-xs font-medium text-slate-500">Berechnung</label>
