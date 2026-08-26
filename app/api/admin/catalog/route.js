@@ -38,6 +38,13 @@ export async function POST(request) {
     return typeof value === "string" ? value.trim() : "";
   }
 
+  // Empty/undefined = unrestricted (see lib/unitGroupRestriction.js) —
+  // anything not a non-empty string is dropped rather than stored as
+  // garbage that could accidentally restrict an extra to nothing.
+  const allowedUnitGroupIds = Array.isArray(item.allowedUnitGroupIds)
+    ? item.allowedUnitGroupIds.filter((id) => typeof id === "string" && id.trim()).map((id) => id.trim())
+    : [];
+
   const saved = await upsertCatalogItem(propertyId, {
     serviceId: item.serviceId,
     code: item.code || "",
@@ -65,6 +72,7 @@ export async function POST(request) {
     descriptionEn: optionalText(item.descriptionEn),
     priceUnitLabelDe: optionalText(item.priceUnitLabelDe),
     priceUnitLabelEn: optionalText(item.priceUnitLabelEn),
+    allowedUnitGroupIds,
   });
 
   return NextResponse.json({ item: saved });

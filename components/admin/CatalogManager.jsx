@@ -34,6 +34,7 @@ function emptyRow(service) {
     descriptionEn: "",
     priceUnitLabelDe: "",
     priceUnitLabelEn: "",
+    allowedUnitGroupIds: [],
   };
 }
 
@@ -41,6 +42,7 @@ export default function CatalogManager() {
   const [properties, setProperties] = useState([]);
   const [propertyId, setPropertyId] = useState("");
   const [rows, setRows] = useState([]);
+  const [unitGroups, setUnitGroups] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [savingId, setSavingId] = useState(null);
@@ -69,13 +71,15 @@ export default function CatalogManager() {
     Promise.all([
       fetch(`/api/admin/services?propertyId=${encodeURIComponent(propertyId)}`).then((r) => r.json()),
       fetch(`/api/admin/catalog?propertyId=${encodeURIComponent(propertyId)}`).then((r) => r.json()),
+      fetch(`/api/admin/unit-groups?propertyId=${encodeURIComponent(propertyId)}`).then((r) => r.json()),
     ])
-      .then(([servicesData, catalogData]) => {
+      .then(([servicesData, catalogData, unitGroupsData]) => {
         const curated = new Map((catalogData.items || []).map((i) => [i.serviceId, i]));
         const merged = (servicesData.services || []).map((s) =>
           curated.has(s.id) ? { ...emptyRow(s), ...curated.get(s.id) } : emptyRow(s)
         );
         setRows(merged);
+        setUnitGroups(unitGroupsData.unitGroups || []);
       })
       .catch(() => setError("Katalog konnte nicht geladen werden."))
       .finally(() => setLoading(false));
@@ -83,6 +87,14 @@ export default function CatalogManager() {
 
   function updateRow(serviceId, patch) {
     setRows((prev) => prev.map((r) => (r.serviceId === serviceId ? { ...r, ...patch } : r)));
+  }
+
+  function toggleUnitGroup(row, unitGroupId) {
+    const current = row.allowedUnitGroupIds || [];
+    const next = current.includes(unitGroupId)
+      ? current.filter((id) => id !== unitGroupId)
+      : [...current, unitGroupId];
+    updateRow(row.serviceId, { allowedUnitGroupIds: next });
   }
 
   async function handleImageUpload(serviceId, file) {
@@ -286,6 +298,42 @@ export default function CatalogManager() {
                   placeholder={DEFAULT_PRICE_UNIT_LABELS_EN[row.bookingRule || "per_stay"] || ""}
                   className="mt-1 w-full rounded-md border border-slate-300 px-3 py-1.5 text-sm"
                 />
+              </div>
+
+              <div className="sm:col-span-2">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                  Verfügbar in Apartmenttypen
+                </p>
+                <p className="mt-0.5 text-xs text-slate-400">
+                  Ohne Auswahl gilt: für alle Apartmenttypen verfügbar. Zum Einschränken (z. B. beim Extra
+                  „Hund“) gezielt Apartmenttypen auswählen.
+                </p>
+                <label className="mt-2 flex items-center gap-2 text-sm text-slate-700">
+                  <input
+                    type="checkbox"
+                    checked={!row.allowedUnitGroupIds?.length}
+                    onChange={() => updateRow(row.serviceId, { allowedUnitGroupIds: [] })}
+                  />
+                  Alle Apartmenttypen
+                </label>
+                <div className="mt-2 grid gap-1.5 sm:grid-cols-2">
+                  {unitGroups.map((g) => (
+                    <label key={g.id} className="flex items-center gap-2 text-sm text-slate-700">
+                      <input
+                        type="checkbox"
+                        checked={(row.allowedUnitGroupIds || []).includes(g.id)}
+                        onChange={() => toggleUnitGroup(row, g.id)}
+                      />
+                      <span title={g.id}>
+                        {g.name}
+                        {g.code ? ` (${g.code})` : ""}
+                      </span>
+                    </label>
+                  ))}
+                  {!unitGroups.length && (
+                    <p className="text-xs text-slate-400">Keine Apartmenttypen für dieses Hotel gefunden.</p>
+                  )}
+                </div>
               </div>
 
               <div className="flex items-center gap-4 sm:col-span-2">

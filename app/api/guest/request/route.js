@@ -31,6 +31,15 @@ export async function POST(request) {
     if (!item) {
       return NextResponse.json({ error: t(language, "requestFailedError") }, { status: 404 });
     }
+    // Booking safety, same as the instant path (lib/guest.js's
+    // placeGuestOrder): `item` was just derived from a reservation
+    // re-fetched fresh above, so a restriction can never be bypassed by a
+    // stale catalog snapshot in the guest's browser — the guest must not be
+    // able to submit a request for an apartment type the extra isn't
+    // allowed in, even if their form was already open before that became true.
+    if (item.unitGroupRestricted) {
+      return NextResponse.json({ error: t(language, "unitGroupRestrictedMessage") }, { status: 403 });
+    }
 
     const record = await createGuestRequest({
       reservation,

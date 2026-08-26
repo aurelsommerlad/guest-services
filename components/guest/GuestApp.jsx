@@ -202,6 +202,7 @@ function ReservationPicker({ language, reservations, onSelect }) {
 }
 
 function InstantCatalogItem({ item, language, count, onChange }) {
+  const restricted = item.unitGroupRestricted;
   // The unit price + its label in the top-right corner never changes with
   // quantity — only this optional breakdown line, shown once the guest has
   // selected at least one unit, reflects nights/quantity multiplication.
@@ -231,14 +232,20 @@ function InstantCatalogItem({ item, language, count, onChange }) {
         <div className="min-w-0 flex-1">
           <h3 className={`${HEADING_CLASS} text-base text-stone-900 sm:text-lg`}>{displayName}</h3>
           {description && <p className="mt-1 text-sm text-stone-500">{description}</p>}
-          {breakdown && (
-            <p className="mt-2 text-xs text-stone-500 sm:text-sm">
-              {formatPrice(breakdown.unitPrice, language)}
-              {breakdown.nights && ` × ${breakdown.nights} ${t(language, "nights")}`}
-              {breakdown.count && ` × ${breakdown.count}`}
-              {" = "}
-              {formatPrice(breakdown.total, language)}
+          {restricted ? (
+            <p className="mt-2 text-xs font-medium text-amber-700 sm:text-sm">
+              {t(language, "unitGroupRestrictedMessage")}
             </p>
+          ) : (
+            breakdown && (
+              <p className="mt-2 text-xs text-stone-500 sm:text-sm">
+                {formatPrice(breakdown.unitPrice, language)}
+                {breakdown.nights && ` × ${breakdown.nights} ${t(language, "nights")}`}
+                {breakdown.count && ` × ${breakdown.count}`}
+                {" = "}
+                {formatPrice(breakdown.total, language)}
+              </p>
+            )
           )}
         </div>
       </div>
@@ -254,7 +261,7 @@ function InstantCatalogItem({ item, language, count, onChange }) {
           <button
             type="button"
             onClick={() => onChange(Math.max(0, count - 1))}
-            disabled={count === 0}
+            disabled={count === 0 || restricted}
             className="flex h-9 w-9 items-center justify-center rounded-full border border-stone-300 text-lg font-medium text-stone-600 transition hover:border-stone-400 hover:bg-stone-50 disabled:cursor-not-allowed disabled:opacity-40"
             aria-label={t(language, "decreaseQuantity")}
           >
@@ -264,7 +271,8 @@ function InstantCatalogItem({ item, language, count, onChange }) {
           <button
             type="button"
             onClick={() => onChange(count + 1)}
-            className="flex h-9 w-9 items-center justify-center rounded-full bg-stone-900 text-lg font-medium text-white transition hover:bg-black"
+            disabled={restricted}
+            className="flex h-9 w-9 items-center justify-center rounded-full bg-stone-900 text-lg font-medium text-white transition hover:bg-black disabled:cursor-not-allowed disabled:bg-stone-300 disabled:opacity-60"
             aria-label={t(language, "increaseQuantity")}
           >
             +
@@ -281,6 +289,7 @@ function RequestCatalogItem({ item, language, reservationId, lastName, guestName
   const [name, setName] = useState(guestName || "");
   const [email, setEmail] = useState("");
   const [error, setError] = useState("");
+  const restricted = item.unitGroupRestricted;
   const displayName = item.displayName[language];
   const description = item.description[language];
   const priceUnitLabel = item.priceUnitLabel[language];
@@ -327,7 +336,13 @@ function RequestCatalogItem({ item, language, reservationId, lastName, guestName
             </span>
           </div>
           {description && <p className="mt-1 text-sm text-stone-500">{description}</p>}
-          <p className="mt-2 text-xs text-stone-500 sm:text-sm">{t(language, "requestExplanation")}</p>
+          {restricted ? (
+            <p className="mt-2 text-xs font-medium text-amber-700 sm:text-sm">
+              {t(language, "unitGroupRestrictedMessage")}
+            </p>
+          ) : (
+            <p className="mt-2 text-xs text-stone-500 sm:text-sm">{t(language, "requestExplanation")}</p>
+          )}
         </div>
       </div>
 
@@ -341,7 +356,11 @@ function RequestCatalogItem({ item, language, reservationId, lastName, guestName
           </div>
         )}
 
-        {status === "sent" ? (
+        {restricted ? (
+          <button type="button" disabled className={`${SECONDARY_BUTTON} cursor-not-allowed opacity-40`}>
+            {t(language, "requestButton")}
+          </button>
+        ) : status === "sent" ? (
           <div className="rounded-md border border-stone-200 bg-stone-50 px-3 py-2.5 text-sm text-stone-700">
             <p className="font-medium text-stone-900">{t(language, "requestSentTitle")}</p>
             <p className="mt-0.5 text-xs text-stone-500">{t(language, "requestExplanation")}</p>
