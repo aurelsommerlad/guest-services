@@ -149,9 +149,9 @@ function ReservationSummary({ language, reservation }) {
   return (
     <div className="mb-8 space-y-1.5 text-center sm:text-left">
       {propertyName && (
-        <p className={`${HEADING_CLASS} text-lg text-stone-900 sm:text-xl`}>{propertyName}</p>
+        <p className={`${HEADING_CLASS} break-words text-lg text-stone-900 sm:text-xl`}>{propertyName}</p>
       )}
-      {guestName && <p className="text-sm text-stone-600">{guestName}</p>}
+      {guestName && <p className="break-words text-sm text-stone-600">{guestName}</p>}
       <p className="text-sm text-stone-500">{translateGuestCounts(language, adults, children)}</p>
       <div className="flex items-center justify-center gap-2 text-sm text-stone-500 sm:justify-start">
         <span>{formatDate(arrival, language)}</span>
@@ -284,15 +284,15 @@ function InstantCatalogItem({ item, language, count, onChange, plates, onPlateCh
           )}
         </div>
         <div className="min-w-0 flex-1">
-          <h3 className={`${HEADING_CLASS} text-base text-stone-900 sm:text-lg`}>{displayName}</h3>
-          {description && <p className="mt-1 text-sm text-stone-500">{description}</p>}
+          <h3 className={`${HEADING_CLASS} break-words text-base text-stone-900 sm:text-lg`}>{displayName}</h3>
+          {description && <p className="mt-1 break-words text-sm text-stone-500">{description}</p>}
           {restricted ? (
-            <p className="mt-2 text-xs font-medium text-amber-700 sm:text-sm">
+            <p className="mt-2 break-words text-xs font-medium text-amber-700 sm:text-sm">
               {t(language, "unitGroupRestrictedMessage")}
             </p>
           ) : (
             breakdown && (
-              <p className="mt-2 text-xs text-stone-500 sm:text-sm">
+              <p className="mt-2 break-words text-xs text-stone-500 sm:text-sm">
                 {formatPrice(breakdown.unitPrice, language)}
                 {breakdown.nights && ` × ${breakdown.nights} ${t(language, "nights")}`}
                 {breakdown.count && ` × ${breakdown.count}`}
@@ -302,7 +302,7 @@ function InstantCatalogItem({ item, language, count, onChange, plates, onPlateCh
             )
           )}
           {!restricted && item.actionType === "increase_occupancy" && count > 0 && (
-            <p className="mt-2 text-xs font-medium text-stone-600 sm:text-sm">
+            <p className="mt-2 break-words text-xs font-medium text-stone-600 sm:text-sm">
               {t(language, "extraPersonAmendmentNotice")}
             </p>
           )}
@@ -312,8 +312,8 @@ function InstantCatalogItem({ item, language, count, onChange, plates, onPlateCh
                 const value = plates?.[i] || "";
                 const showRequiredHint = !value.trim();
                 return (
-                  <div key={i}>
-                    <label className="block text-xs font-medium text-stone-500">
+                  <div key={i} className="min-w-0">
+                    <label className="block break-words text-xs font-medium text-stone-500">
                       {count > 1 ? `${t(language, "licensePlateLabel")} ${i + 1}` : t(language, "licensePlateLabel")}
                     </label>
                     <input
@@ -322,10 +322,10 @@ function InstantCatalogItem({ item, language, count, onChange, plates, onPlateCh
                       value={value}
                       onChange={(e) => onPlateChange(i, e.target.value)}
                       placeholder={t(language, "licensePlatePlaceholder")}
-                      className={`mt-1 w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm text-stone-900 placeholder:text-stone-400 focus:border-stone-900 focus:outline-none focus:ring-1 focus:ring-stone-900`}
+                      className={`mt-1 w-full max-w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm text-stone-900 placeholder:text-stone-400 focus:border-stone-900 focus:outline-none focus:ring-1 focus:ring-stone-900`}
                     />
                     {showRequiredHint && (
-                      <p className="mt-1 text-xs text-amber-700">{t(language, "licensePlateRequiredError")}</p>
+                      <p className="mt-1 break-words text-xs text-amber-700">{t(language, "licensePlateRequiredError")}</p>
                     )}
                   </div>
                 );
@@ -335,14 +335,14 @@ function InstantCatalogItem({ item, language, count, onChange, plates, onPlateCh
         </div>
       </div>
 
-      <div className="flex items-center justify-between gap-4 sm:flex-shrink-0 sm:flex-col sm:items-end sm:gap-3">
-        <div className="text-right">
+      <div className="flex min-w-0 items-center justify-between gap-4 sm:flex-shrink-0 sm:flex-col sm:items-end sm:gap-3">
+        <div className="min-w-0 text-right">
           <div className="text-lg font-semibold text-stone-900">{formatPrice(item.unitPrice, language)}</div>
           {priceUnitLabel && (
-            <div className="text-xs uppercase tracking-wide text-stone-500">{priceUnitLabel}</div>
+            <div className="break-words text-xs uppercase tracking-wide text-stone-500">{priceUnitLabel}</div>
           )}
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-shrink-0 items-center gap-3">
           <button
             type="button"
             onClick={() => onChange(Math.max(0, count - 1))}
@@ -415,27 +415,27 @@ function RequestCatalogItem({ item, language, reservationId, lastName, guestName
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
-            <h3 className={`${HEADING_CLASS} text-base text-stone-900 sm:text-lg`}>{displayName}</h3>
+            <h3 className={`${HEADING_CLASS} break-words text-base text-stone-900 sm:text-lg`}>{displayName}</h3>
             <span className="rounded-full border border-stone-300 px-2 py-0.5 text-[11px] font-medium uppercase tracking-wide text-stone-500">
               {t(language, "onRequestBadge")}
             </span>
           </div>
-          {description && <p className="mt-1 text-sm text-stone-500">{description}</p>}
+          {description && <p className="mt-1 break-words text-sm text-stone-500">{description}</p>}
           {restricted ? (
-            <p className="mt-2 text-xs font-medium text-amber-700 sm:text-sm">
+            <p className="mt-2 break-words text-xs font-medium text-amber-700 sm:text-sm">
               {t(language, "unitGroupRestrictedMessage")}
             </p>
           ) : (
-            <p className="mt-2 text-xs text-stone-500 sm:text-sm">{t(language, "requestExplanation")}</p>
+            <p className="mt-2 break-words text-xs text-stone-500 sm:text-sm">{t(language, "requestExplanation")}</p>
           )}
         </div>
       </div>
 
-      <div className="flex flex-col items-stretch gap-3 sm:w-64 sm:flex-shrink-0">
+      <div className="flex min-w-0 flex-col items-stretch gap-3 sm:w-64 sm:flex-shrink-0">
         {item.unitPrice && (
-          <div className="text-right">
+          <div className="min-w-0 text-right">
             <div className="text-lg font-semibold text-stone-900">{formatPrice(item.unitPrice, language)}</div>
-            <div className="text-xs uppercase tracking-wide text-stone-500">
+            <div className="break-words text-xs uppercase tracking-wide text-stone-500">
               {priceUnitLabel ? `${priceUnitLabel} · ${t(language, "ifConfirmed")}` : t(language, "ifConfirmed")}
             </div>
           </div>
@@ -550,8 +550,8 @@ function CatalogView({
       </div>
 
       {totalCount > 0 && (
-        <div className="fixed inset-x-0 bottom-0 border-t border-stone-200 bg-stone-50/97 backdrop-blur">
-          <div className="mx-auto max-w-3xl space-y-3 px-4 py-4 sm:px-6 sm:py-5 lg:max-w-5xl">
+        <div className="fixed inset-x-0 bottom-0 w-full max-w-full border-t border-stone-200 bg-stone-50/97 backdrop-blur">
+          <div className="mx-auto max-w-3xl space-y-3 px-5 py-4 sm:px-6 sm:py-5 lg:max-w-5xl">
             <input
               type="text"
               value={guestName}
@@ -588,7 +588,7 @@ function Confirmation({ language, result, onRestart }) {
       </div>
       <ul className="mx-auto max-w-sm space-y-2 text-left sm:mx-0">
         {result.booked.map((item, i) => (
-          <li key={i} className="rounded-md border border-stone-200 bg-white px-4 py-3 text-stone-800">
+          <li key={i} className="break-words rounded-md border border-stone-200 bg-white px-4 py-3 text-stone-800">
             {item.count}x {item.displayName[language]}
           </li>
         ))}
@@ -768,9 +768,9 @@ export default function GuestApp() {
   const isWideStep = step === "catalog";
 
   return (
-    <div className="guest-shell min-h-screen bg-white">
+    <div className="guest-shell min-h-screen w-full max-w-full bg-white">
       <main
-        className={`mx-auto px-4 py-8 sm:px-6 sm:py-12 ${
+        className={`mx-auto w-full max-w-full px-5 py-8 sm:px-6 sm:py-12 ${
           isWideStep ? "max-w-3xl lg:max-w-5xl" : "max-w-lg"
         }`}
       >
@@ -784,8 +784,10 @@ export default function GuestApp() {
         <ReservationSummary language={language} reservation={reservation} />
 
         <header className="mb-8 text-left">
-          <h1 className={`${HEADING_CLASS} text-2xl text-stone-900 sm:text-3xl`}>{t(language, "pageTitle")}</h1>
-          <p className="mt-2 text-sm text-stone-500 sm:text-base">{t(language, "pageSubtitle")}</p>
+          <h1 className={`${HEADING_CLASS} break-words text-2xl text-stone-900 sm:text-3xl`}>
+            {t(language, "pageTitle")}
+          </h1>
+          <p className="mt-2 break-words text-sm text-stone-500 sm:text-base">{t(language, "pageSubtitle")}</p>
         </header>
 
         {step === "search" && (
