@@ -41,6 +41,11 @@ test("t() returns the correct translation per language for representative guest-
     ["totalPriceLabel", "Gesamtpreis", "Total price"],
     ["vatIncluded", "inkl. MwSt.", "incl. VAT"],
     ["nights", "Nächte", "nights"],
+    [
+      "capacityExceededError",
+      "Für diese Buchung ist keine weitere Person mehr möglich.",
+      "No additional guest can be added to this booking.",
+    ],
   ];
   for (const [key, de, en] of pairs) {
     assert.equal(t("de", key), de, `de.${key}`);

@@ -83,6 +83,10 @@ export async function POST(request) {
     priceUnitLabelEn: optionalText(item.priceUnitLabelEn),
     allowedUnitGroupIds,
     sortOrder: optionalNumber(item.sortOrder),
+    // Default false = current behavior (see lib/capacity.js) — only true
+    // hides the extra once the booked unit group has no remaining guest
+    // capacity, e.g. "Extra person"/"Zusatzperson".
+    requiresRemainingCapacity: Boolean(item.requiresRemainingCapacity),
   });
 
   return NextResponse.json({ item: saved });

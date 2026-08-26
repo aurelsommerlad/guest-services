@@ -36,6 +36,7 @@ function emptyRow(service) {
     priceUnitLabelEn: "",
     allowedUnitGroupIds: [],
     sortOrder: null,
+    requiresRemainingCapacity: false,
   };
 }
 
@@ -239,6 +240,20 @@ export default function CatalogManager() {
                   placeholder={DEFAULT_PRICE_UNIT_LABELS[row.bookingRule || "per_stay"] || ""}
                   className="mt-1 w-full rounded-md border border-slate-300 px-3 py-1.5 text-sm"
                 />
+              </div>
+              <div className="sm:col-span-2">
+                <label className="flex items-center gap-2 text-sm text-slate-700">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(row.requiresRemainingCapacity)}
+                    onChange={(e) => updateRow(row.serviceId, { requiresRemainingCapacity: e.target.checked })}
+                  />
+                  Nur bei freier Personenkapazität anzeigen
+                </label>
+                <p className="mt-0.5 text-xs text-slate-400">
+                  Zeigt dieses Extra nur, solange die gebuchte Apartmentkapazität noch nicht durch
+                  Erwachsene und Kinder ausgeschöpft ist (z. B. „Zusatzperson“).
+                </p>
               </div>
               <div className="sm:col-span-2">
                 <label className="block text-xs font-medium text-slate-500">Beschreibung</label>

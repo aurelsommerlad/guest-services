@@ -252,6 +252,10 @@ function ReservationPicker({ language, reservations, onSelect }) {
 
 function InstantCatalogItem({ item, language, count, onChange }) {
   const restricted = item.unitGroupRestricted;
+  // maxQuantity is only ever set for requiresRemainingCapacity items (e.g.
+  // "Extra person") — null/undefined for every other item, so this never
+  // caps anything that didn't already have a cap before.
+  const atMaxQuantity = Number.isFinite(item.maxQuantity) && count >= item.maxQuantity;
   // The unit price + its label in the top-right corner never changes with
   // quantity — only this optional breakdown line, shown once the guest has
   // selected at least one unit, reflects nights/quantity multiplication.
@@ -320,7 +324,7 @@ function InstantCatalogItem({ item, language, count, onChange }) {
           <button
             type="button"
             onClick={() => onChange(count + 1)}
-            disabled={restricted}
+            disabled={restricted || atMaxQuantity}
             className="flex h-9 w-9 items-center justify-center rounded-full bg-stone-900 text-lg font-medium text-white transition hover:bg-black disabled:cursor-not-allowed disabled:bg-stone-300 disabled:opacity-60"
             aria-label={t(language, "increaseQuantity")}
           >
