@@ -20,13 +20,28 @@ const PRIMARY_BUTTON =
   "inline-flex w-full items-center justify-center rounded-md bg-stone-900 px-6 py-3.5 text-sm font-semibold uppercase tracking-wide text-white transition hover:bg-black disabled:cursor-not-allowed disabled:opacity-50";
 const SECONDARY_BUTTON =
   "inline-flex items-center justify-center rounded-md border border-stone-300 bg-white px-5 py-2.5 text-sm font-medium uppercase tracking-wide text-stone-700 transition hover:border-stone-400 hover:bg-stone-50";
+// text-base (16px) is intentional, not the original 15px: iOS Safari
+// auto-zooms the page on focus for any form control whose computed
+// font-size is below 16px. Below that threshold this exact input (the
+// reservation-lookup "Buchungsnummer"/"Nachname" fields) is what triggers
+// the zoom the guest sees. 16px is the smallest size that avoids it.
 const INPUT_CLASS =
-  "w-full rounded-md border border-stone-300 bg-white px-4 py-3 text-[15px] text-stone-900 placeholder:text-stone-400 focus:border-stone-900 focus:outline-none focus:ring-1 focus:ring-stone-900";
+  "w-full rounded-md border border-stone-300 bg-white px-4 py-3 text-base text-stone-900 placeholder:text-stone-400 focus:border-stone-900 focus:outline-none focus:ring-1 focus:ring-stone-900";
 const ERROR_BANNER = "rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700";
 const NOTICE_BANNER = "rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800";
 const LABEL_CLASS = "block text-sm font-medium text-stone-700";
 // Josefin Sans (weight 400) for headings/titles — see app/globals.css.
 const HEADING_CLASS = "guest-heading";
+
+// Blurs whatever form control currently has focus, if any — used right
+// before a step transition (see loadCatalog/handleSearch below) so a
+// focused input never carries into the next screen.
+function blurActiveElement() {
+  const active = typeof document !== "undefined" ? document.activeElement : null;
+  if (active instanceof HTMLElement && typeof active.blur === "function") {
+    active.blur();
+  }
+}
 
 async function postJSON(url, body) {
   const res = await fetch(url, {
@@ -322,7 +337,7 @@ function InstantCatalogItem({ item, language, count, onChange, plates, onPlateCh
                       value={value}
                       onChange={(e) => onPlateChange(i, e.target.value)}
                       placeholder={t(language, "licensePlatePlaceholder")}
-                      className={`mt-1 w-full max-w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm text-stone-900 placeholder:text-stone-400 focus:border-stone-900 focus:outline-none focus:ring-1 focus:ring-stone-900`}
+                      className={`mt-1 w-full max-w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-base sm:text-sm text-stone-900 placeholder:text-stone-400 focus:border-stone-900 focus:outline-none focus:ring-1 focus:ring-stone-900`}
                     />
                     {showRequiredHint && (
                       <p className="mt-1 break-words text-xs text-amber-700">{t(language, "licensePlateRequiredError")}</p>
@@ -458,14 +473,14 @@ function RequestCatalogItem({ item, language, reservationId, lastName, guestName
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder={t(language, "requestNamePlaceholder")}
-              className={`${INPUT_CLASS} py-2 text-sm`}
+              className={`${INPUT_CLASS} py-2 text-base sm:text-sm`}
             />
             <input
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder={t(language, "requestEmailPlaceholder")}
-              className={`${INPUT_CLASS} py-2 text-sm`}
+              className={`${INPUT_CLASS} py-2 text-base sm:text-sm`}
             />
             {status === "error" && <p className="text-xs text-red-600">{error}</p>}
             <button type="submit" disabled={status === "submitting"} className={`${SECONDARY_BUTTON} w-full`}>
@@ -652,6 +667,13 @@ export default function GuestApp() {
   }
 
   async function loadCatalog(res, name) {
+    // Defensive: on iOS Safari, an input left focused while the page
+    // transitions away from it can keep the visual viewport in whatever
+    // zoom state that input's focus put it in. The lookup inputs are fixed
+    // to 16px now (see INPUT_CLASS), which is the actual fix — this blur is
+    // just belt-and-braces so the keyboard/zoom settle immediately rather
+    // than lingering through the transition to the Extras page.
+    blurActiveElement();
     setLoading(true);
     setError("");
     try {
@@ -681,6 +703,10 @@ export default function GuestApp() {
   }
 
   async function handleSearch({ number, lastName: name }) {
+    // See loadCatalog's matching comment — closes the keyboard and lets any
+    // iOS zoom state settle right away on submit, instead of carrying it
+    // through to whichever step comes next.
+    blurActiveElement();
     setLoading(true);
     setError("");
     setLastName(name);
