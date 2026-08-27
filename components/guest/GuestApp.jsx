@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { formatDate, formatPrice } from "@/lib/format";
 import { computePriceBreakdown } from "@/lib/priceDisplay";
-import { LANGUAGES, DEFAULT_LANGUAGE, t, translateExtraCount, translateGuestCounts } from "@/lib/i18n";
+import { LANGUAGES, DEFAULT_LANGUAGE, t, translateExtraCount } from "@/lib/i18n";
 import { resizeVehiclePlates, hasCompleteVehiclePlates } from "@/lib/vehicleRegistration";
 
 const LANGUAGE_STORAGE_KEY = "guestLanguage";
@@ -151,23 +151,24 @@ function ArrowIcon() {
 }
 
 // Compact reservation summary shown once the guest's reservation has been
-// identified — property name, guest name, adult/child counts, and
-// arrival/departure — deliberately restrained (no card, no icons besides
-// the arrow, no labels like "Gast"/"Anreise"/"Abreise") so it reads as part
-// of the page rather than a generic app widget. `reservation` here is
-// exactly what /api/guest/lookup already returned (see
-// lib/reservationSummary.js) — no extra request.
+// identified — property name, guest name, and arrival/departure —
+// deliberately restrained (no card, no icons besides the arrow, no labels
+// like "Gast"/"Anreise"/"Abreise") so it reads as part of the page rather
+// than a generic app widget. `reservation` here is exactly what
+// /api/guest/lookup already returned (see lib/reservationSummary.js) — no
+// extra request. Adult/child counts are intentionally not shown here (the
+// reservation object still carries them for the rest of the app, e.g.
+// capacity checks — this component just doesn't render that field).
 function ReservationSummary({ language, reservation }) {
   if (!reservation) return null;
-  const { propertyName, guestName, adults, children, arrival, departure } = reservation;
+  const { propertyName, guestName, arrival, departure } = reservation;
 
   return (
     <div className="mb-8 space-y-1.5 text-center sm:text-left">
       {propertyName && (
         <p className={`${HEADING_CLASS} break-words text-lg text-stone-900 sm:text-xl`}>{propertyName}</p>
       )}
-      {guestName && <p className="break-words text-sm text-stone-600">{guestName}</p>}
-      <p className="text-sm text-stone-500">{translateGuestCounts(language, adults, children)}</p>
+      {guestName && <p className="break-words text-sm font-medium text-stone-600">{guestName}</p>}
       <div className="flex items-center justify-center gap-2 text-sm text-stone-500 sm:justify-start">
         <span>{formatDate(arrival, language)}</span>
         <ArrowIcon />
@@ -286,7 +287,7 @@ function InstantCatalogItem({ item, language, count, onChange, plates, onPlateCh
   const priceUnitLabel = item.priceUnitLabel[language];
 
   return (
-    <div className="flex flex-col gap-4 rounded-lg border border-stone-200 bg-white p-4 sm:flex-row sm:items-center sm:gap-6 sm:p-6">
+    <div className="flex flex-col gap-4 rounded-lg border border-stone-200 bg-white p-4 sm:flex-row sm:items-start sm:gap-6 sm:p-6">
       <div className="flex items-start gap-4 sm:flex-1 sm:items-center sm:gap-6">
         <div className="h-16 w-16 flex-shrink-0 overflow-hidden rounded-md bg-stone-100 sm:h-20 sm:w-20">
           {item.imageUrl ? (
