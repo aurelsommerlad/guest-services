@@ -287,7 +287,7 @@ function InstantCatalogItem({ item, language, count, onChange, plates, onPlateCh
   const priceUnitLabel = item.priceUnitLabel[language];
 
   return (
-    <div className="flex flex-col gap-4 rounded-lg border border-stone-200 bg-white p-4 sm:flex-row sm:items-start sm:gap-6 sm:p-6">
+    <div className="flex flex-col gap-4 rounded-lg border border-stone-200 bg-white p-4 sm:flex-row sm:items-center sm:gap-6 sm:p-6">
       <div className="flex items-start gap-4 sm:flex-1 sm:items-center sm:gap-6">
         <div className="h-16 w-16 flex-shrink-0 overflow-hidden rounded-md bg-stone-100 sm:h-20 sm:w-20">
           {item.imageUrl ? (
@@ -300,7 +300,17 @@ function InstantCatalogItem({ item, language, count, onChange, plates, onPlateCh
           )}
         </div>
         <div className="min-w-0 flex-1">
-          <h3 className={`${HEADING_CLASS} break-words text-base text-stone-900 sm:text-lg`}>{displayName}</h3>
+          <div className="flex items-start justify-between gap-3">
+            <h3 className={`${HEADING_CLASS} min-w-0 flex-1 break-words text-base text-stone-900 sm:text-lg`}>
+              {displayName}
+            </h3>
+            <div className="w-24 flex-shrink-0 text-right sm:w-auto">
+              <div className="text-lg font-semibold text-stone-900">{formatPrice(item.unitPrice, language)}</div>
+              {priceUnitLabel && (
+                <div className="break-words text-xs uppercase tracking-wide text-stone-500">{priceUnitLabel}</div>
+              )}
+            </div>
+          </div>
           {description && <p className="mt-1 break-words text-sm text-stone-500">{description}</p>}
           {restricted ? (
             <p className="mt-2 break-words text-xs font-medium text-amber-700 sm:text-sm">
@@ -351,34 +361,26 @@ function InstantCatalogItem({ item, language, count, onChange, plates, onPlateCh
         </div>
       </div>
 
-      <div className="flex min-w-0 items-center justify-between gap-4 sm:flex-shrink-0 sm:flex-col sm:items-end sm:gap-3">
-        <div className="min-w-0 text-right">
-          <div className="text-lg font-semibold text-stone-900">{formatPrice(item.unitPrice, language)}</div>
-          {priceUnitLabel && (
-            <div className="break-words text-xs uppercase tracking-wide text-stone-500">{priceUnitLabel}</div>
-          )}
-        </div>
-        <div className="flex flex-shrink-0 items-center gap-3">
-          <button
-            type="button"
-            onClick={() => onChange(Math.max(0, count - 1))}
-            disabled={count === 0 || restricted}
-            className="flex h-9 w-9 items-center justify-center rounded-full border border-stone-300 text-lg font-medium text-stone-600 transition hover:border-stone-400 hover:bg-stone-50 disabled:cursor-not-allowed disabled:opacity-40"
-            aria-label={t(language, "decreaseQuantity")}
-          >
-            –
-          </button>
-          <span className="w-6 text-center text-base font-medium text-stone-900">{count}</span>
-          <button
-            type="button"
-            onClick={() => onChange(count + 1)}
-            disabled={restricted || atMaxQuantity}
-            className="flex h-9 w-9 items-center justify-center rounded-full bg-stone-900 text-lg font-medium text-white transition hover:bg-black disabled:cursor-not-allowed disabled:bg-stone-300 disabled:opacity-60"
-            aria-label={t(language, "increaseQuantity")}
-          >
-            +
-          </button>
-        </div>
+      <div className="flex flex-shrink-0 items-center justify-end gap-3">
+        <button
+          type="button"
+          onClick={() => onChange(Math.max(0, count - 1))}
+          disabled={count === 0 || restricted}
+          className="flex h-9 w-9 items-center justify-center rounded-full border border-stone-300 text-lg font-medium text-stone-600 transition hover:border-stone-400 hover:bg-stone-50 disabled:cursor-not-allowed disabled:opacity-40"
+          aria-label={t(language, "decreaseQuantity")}
+        >
+          –
+        </button>
+        <span className="w-6 text-center text-base font-medium text-stone-900">{count}</span>
+        <button
+          type="button"
+          onClick={() => onChange(count + 1)}
+          disabled={restricted || atMaxQuantity}
+          className="flex h-9 w-9 items-center justify-center rounded-full bg-stone-900 text-lg font-medium text-white transition hover:bg-black disabled:cursor-not-allowed disabled:bg-stone-300 disabled:opacity-60"
+          aria-label={t(language, "increaseQuantity")}
+        >
+          +
+        </button>
       </div>
     </div>
   );
@@ -430,11 +432,23 @@ function RequestCatalogItem({ item, language, reservationId, lastName, guestName
           )}
         </div>
         <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <h3 className={`${HEADING_CLASS} break-words text-base text-stone-900 sm:text-lg`}>{displayName}</h3>
-            <span className="rounded-full border border-stone-300 px-2 py-0.5 text-[11px] font-medium uppercase tracking-wide text-stone-500">
-              {t(language, "onRequestBadge")}
-            </span>
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+              <h3 className={`${HEADING_CLASS} min-w-0 break-words text-base text-stone-900 sm:text-lg`}>
+                {displayName}
+              </h3>
+              <span className="rounded-full border border-stone-300 px-2 py-0.5 text-[11px] font-medium uppercase tracking-wide text-stone-500">
+                {t(language, "onRequestBadge")}
+              </span>
+            </div>
+            {item.unitPrice && (
+              <div className="w-24 flex-shrink-0 text-right sm:w-auto">
+                <div className="text-lg font-semibold text-stone-900">{formatPrice(item.unitPrice, language)}</div>
+                <div className="break-words text-xs uppercase tracking-wide text-stone-500">
+                  {priceUnitLabel ? `${priceUnitLabel} · ${t(language, "ifConfirmed")}` : t(language, "ifConfirmed")}
+                </div>
+              </div>
+            )}
           </div>
           {description && <p className="mt-1 break-words text-sm text-stone-500">{description}</p>}
           {restricted ? (
@@ -448,15 +462,6 @@ function RequestCatalogItem({ item, language, reservationId, lastName, guestName
       </div>
 
       <div className="flex min-w-0 flex-col items-stretch gap-3 sm:w-64 sm:flex-shrink-0">
-        {item.unitPrice && (
-          <div className="min-w-0 text-right">
-            <div className="text-lg font-semibold text-stone-900">{formatPrice(item.unitPrice, language)}</div>
-            <div className="break-words text-xs uppercase tracking-wide text-stone-500">
-              {priceUnitLabel ? `${priceUnitLabel} · ${t(language, "ifConfirmed")}` : t(language, "ifConfirmed")}
-            </div>
-          </div>
-        )}
-
         {restricted ? (
           <button type="button" disabled className={`${SECONDARY_BUTTON} cursor-not-allowed opacity-40`}>
             {t(language, "requestButton")}
