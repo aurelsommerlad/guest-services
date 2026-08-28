@@ -28,6 +28,9 @@ import {
   buildServiceExtensionDates,
   findCityTaxAmount,
   buildExtensionPricePreview,
+  findDepartureDateCandidates,
+  buildLateCheckoutMoveDates,
+  verifyLateCheckoutMove,
 } from "../lib/stayExtension.js";
 
 // ---------------------------------------------------------------------
@@ -396,6 +399,94 @@ test("buildExtensionPricePreview: with no extras and no city tax, the total equa
   assert.deepEqual(total, { amount: 93.5, currency: "EUR" });
 });
 
+test("findDepartureDateCandidates: a non-mandatory single-date service dated at the old departure is a candidate", () => {
+  const services = [serviceEntry("LCO", [["2026-10-13", 20]])];
+  const candidates = findDepartureDateCandidates({ services, oldDepartureDate: "2026-10-13" });
+  assert.equal(candidates.length, 1);
+  assert.equal(candidates[0].serviceId, "LCO");
+  assert.deepEqual(candidates[0].amount, { amount: 20, currency: "EUR" });
+  assert.equal(candidates[0].count, 1);
+});
+
+test("findDepartureDateCandidates: a mandatory single-date service at the old departure is never a candidate", () => {
+  const services = [serviceEntry("FINALCLEAN", [["2026-10-13", 119]], { mandatory: true })];
+  const candidates = findDepartureDateCandidates({ services, oldDepartureDate: "2026-10-13" });
+  assert.equal(candidates.length, 0);
+});
+
+test("findDepartureDateCandidates: a multi-date service is never a candidate, even if one date matches the old departure", () => {
+  const services = [serviceEntry("HUND", [["2026-10-12", 15], ["2026-10-13", 15]])];
+  const candidates = findDepartureDateCandidates({ services, oldDepartureDate: "2026-10-13" });
+  assert.equal(candidates.length, 0);
+});
+
+test("findDepartureDateCandidates: a single-date service NOT at the old departure is never a candidate (idempotency: already-moved services are naturally excluded)", () => {
+  const services = [serviceEntry("LCO", [["2026-10-14", 20]])]; // already on the new departure
+  const candidates = findDepartureDateCandidates({ services, oldDepartureDate: "2026-10-13" });
+  assert.equal(candidates.length, 0);
+});
+
+test("buildLateCheckoutMoveDates: exactly one entry, for the new departure date, with the preserved count/amount", () => {
+  const dates = buildLateCheckoutMoveDates({
+    newDepartureDate: "2026-10-14",
+    count: 1,
+    amount: { amount: 20, currency: "EUR" },
+  });
+  assert.deepEqual(dates, [{ serviceDate: "2026-10-14", count: 1, amount: { amount: 20, currency: "EUR" } }]);
+});
+
+test("verifyLateCheckoutMove: true when exactly one date exists, at the new departure, with the exact preserved amount/count", () => {
+  const services = [serviceEntry("LCO", [["2026-10-14", 20]])];
+  const ok = verifyLateCheckoutMove({
+    services,
+    serviceId: "LCO",
+    oldDepartureDate: "2026-10-13",
+    newDepartureDate: "2026-10-14",
+    expectedAmount: 20,
+    expectedCount: 1,
+  });
+  assert.equal(ok, true);
+});
+
+test("verifyLateCheckoutMove: false when the old date is still present, or the amount/count doesn't match, or there's more than one date", () => {
+  assert.equal(
+    verifyLateCheckoutMove({
+      services: [serviceEntry("LCO", [["2026-10-13", 20]])],
+      serviceId: "LCO",
+      oldDepartureDate: "2026-10-13",
+      newDepartureDate: "2026-10-14",
+      expectedAmount: 20,
+      expectedCount: 1,
+    }),
+    false,
+    "still on the old date"
+  );
+  assert.equal(
+    verifyLateCheckoutMove({
+      services: [serviceEntry("LCO", [["2026-10-14", 25]])],
+      serviceId: "LCO",
+      oldDepartureDate: "2026-10-13",
+      newDepartureDate: "2026-10-14",
+      expectedAmount: 20,
+      expectedCount: 1,
+    }),
+    false,
+    "amount changed"
+  );
+  assert.equal(
+    verifyLateCheckoutMove({
+      services: [serviceEntry("LCO", [["2026-10-13", 20], ["2026-10-14", 20]])],
+      serviceId: "LCO",
+      oldDepartureDate: "2026-10-13",
+      newDepartureDate: "2026-10-14",
+      expectedAmount: 20,
+      expectedCount: 1,
+    }),
+    false,
+    "a second date was added instead of replacing the first"
+  );
+});
+
 // ---------------------------------------------------------------------
 // 2. Integration tests: lib/guest.js against a mocked global.fetch
 //    (same technique as test/book-service.test.mjs) + the real local
@@ -440,6 +531,7 @@ function installExtensionFetchMock({
   services = [],
   folios = [],
   bookServiceHandler = null,
+  serviceDefinitions = {},
 }) {
   process.env.APALEO_CLIENT_ID ||= "test-client-id";
   process.env.APALEO_CLIENT_SECRET ||= "test-client-secret";
@@ -450,6 +542,12 @@ function installExtensionFetchMock({
   // state, exactly like the real Apaleo API would — a purely static mock
   // would make every post-amend verification look like it failed.
   let currentReservation = { ...reservation };
+  // Reflects book-service calls (a service's dates[] being replaced) so a
+  // post-move/post-extension re-read sees the actual new state, and so a
+  // second confirmStayExtension run against the SAME mock instance can
+  // exercise genuine retry/idempotency behavior rather than always seeing
+  // the original static list.
+  let currentServices = services.map((s) => ({ ...s, dates: s.dates.map((d) => ({ ...d })) }));
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async (url, options = {}) => {
     const urlObj = new URL(String(url));
@@ -509,7 +607,7 @@ function installExtensionFetchMock({
     }
 
     if (pathname === `/booking/v1/reservations/${reservation.id}/services`) {
-      return new Response(JSON.stringify({ services }), { status: 200 });
+      return new Response(JSON.stringify({ services: currentServices }), { status: 200 });
     }
 
     if (pathname === "/finance/v1/folios") {
@@ -518,10 +616,28 @@ function installExtensionFetchMock({
 
     if (pathname === `/booking/v1/reservation-actions/${reservation.id}/book-service`) {
       if (bookServiceHandler) return bookServiceHandler(JSON.parse(options.body));
+      const body = JSON.parse(options.body);
+      const idx = currentServices.findIndex((s) => s.service?.id === body.serviceId);
+      const meta = idx >= 0 ? currentServices[idx].service : { id: body.serviceId, code: body.serviceId, name: body.serviceId };
+      const nextEntry = {
+        service: meta,
+        dates: body.dates.map((d) => ({
+          serviceDate: d.serviceDate,
+          count: d.count,
+          amount: { grossAmount: d.amount.amount, currency: d.amount.currency },
+          isMandatory: false,
+        })),
+      };
+      if (idx >= 0) currentServices[idx] = nextEntry;
+      else currentServices.push(nextEntry);
       return new Response(JSON.stringify({ id: reservation.id }), { status: 200 });
     }
 
     if (pathname.startsWith("/rateplan/v1/services/")) {
+      const serviceId = decodeURIComponent(pathname.split("/").pop());
+      if (serviceDefinitions[serviceId]) {
+        return new Response(JSON.stringify(serviceDefinitions[serviceId]), { status: 200 });
+      }
       // Localized-name lookup for extras shown in the price preview — not
       // under test here, so just force getServiceLocalized's fallback path
       // (it catches any error and returns null) rather than mocking a full
@@ -1051,6 +1167,206 @@ test("confirmStayExtension: city tax charge found for the new night -> verified 
       assert.equal(records[0].cityTax.verified, true);
       assert.deepEqual(records[0].cityTax.amount, { amount: 4, currency: "EUR" });
       assert.equal(records[0].status, "confirmed");
+    } finally {
+      restore();
+    }
+  });
+});
+
+// ---------------------------------------------------------------------
+// 4. Integration tests: moving a Late-Checkout-style departure-day
+//    service from the old departure to the new one.
+// ---------------------------------------------------------------------
+
+test("confirmStayExtension: moves a Late-Checkout-style departure-day service from the old departure to the new departure, preserving amount/count", async () => {
+  await withCleanLocalDb(async () => {
+    await saveExtensionConfig("TESTPROP", {
+      extensionNightEnabled: true,
+      extensionDiscountOneNightGap: 20,
+      extensionDiscountStandard: 15,
+      minSellableStayNights: 2,
+    });
+    const reservation = reservationFixture();
+    const services = [serviceEntry("HUESLE-LCO", [["2026-10-13", 20]], { name: "Late Check-out" })];
+    const serviceDefinitions = { "HUESLE-LCO": { availability: { mode: "Departure" }, postNextDay: true } };
+    const { calls, restore } = installExtensionFetchMock({
+      reservation,
+      availableNights: [true, false],
+      services,
+      serviceDefinitions,
+    });
+    try {
+      const result = await confirmStayExtension({ reservationId: reservation.id, expectedCurrentDeparture: "2026-10-13" });
+      assert.equal(result.newDeparture, "2026-10-14");
+
+      const bookServiceCalls = calls.filter((c) => c.pathname.endsWith("/book-service"));
+      assert.equal(bookServiceCalls.length, 1, "exactly one book-service call to move it — never a separate remove call");
+      assert.equal(bookServiceCalls[0].body.serviceId, "HUESLE-LCO");
+      assert.deepEqual(
+        bookServiceCalls[0].body.dates,
+        [{ serviceDate: "2026-10-14", count: 1, amount: { amount: 20, currency: "EUR" } }],
+        "exactly one date (the new departure), preserving count/amount, no old date left behind"
+      );
+
+      const records = await listExtensionRecords();
+      assert.equal(records[0].lateCheckoutMoves.length, 1);
+      assert.equal(records[0].lateCheckoutMoves[0].serviceId, "HUESLE-LCO");
+      assert.equal(records[0].lateCheckoutMoves[0].oldDeparture, "2026-10-13");
+      assert.equal(records[0].lateCheckoutMoves[0].newDeparture, "2026-10-14");
+      assert.equal(records[0].lateCheckoutMoves[0].moved, true);
+      assert.equal(records[0].lateCheckoutMoves[0].verified, true);
+      assert.equal(records[0].status, "confirmed");
+    } finally {
+      restore();
+    }
+  });
+});
+
+test("confirmStayExtension: a Late-Checkout-style service already on the new departure is left alone — idempotent, never moved again or charged twice", async () => {
+  await withCleanLocalDb(async () => {
+    await saveExtensionConfig("TESTPROP", {
+      extensionNightEnabled: true,
+      extensionDiscountOneNightGap: 20,
+      extensionDiscountStandard: 15,
+      minSellableStayNights: 2,
+    });
+    const reservation = reservationFixture();
+    // Simulates the service having already been moved by an earlier attempt.
+    const services = [serviceEntry("HUESLE-LCO", [["2026-10-14", 20]], { name: "Late Check-out" })];
+    const serviceDefinitions = { "HUESLE-LCO": { availability: { mode: "Departure" }, postNextDay: true } };
+    const { calls, restore } = installExtensionFetchMock({
+      reservation,
+      availableNights: [true, false],
+      services,
+      serviceDefinitions,
+    });
+    try {
+      await confirmStayExtension({ reservationId: reservation.id, expectedCurrentDeparture: "2026-10-13" });
+      assert.ok(
+        !calls.some((c) => c.pathname.endsWith("/book-service")),
+        "an already-moved service must never be re-sent or charged again"
+      );
+      const records = await listExtensionRecords();
+      assert.equal(records[0].lateCheckoutMoves.length, 0);
+    } finally {
+      restore();
+    }
+  });
+});
+
+test("confirmStayExtension: a single-date service at the old departure with availability.mode !== 'Departure' is never moved", async () => {
+  await withCleanLocalDb(async () => {
+    await saveExtensionConfig("TESTPROP", {
+      extensionNightEnabled: true,
+      extensionDiscountOneNightGap: 20,
+      extensionDiscountStandard: 15,
+      minSellableStayNights: 2,
+    });
+    const reservation = reservationFixture();
+    const services = [serviceEntry("SOME-EXTRA", [["2026-10-13", 15]])];
+    const serviceDefinitions = { "SOME-EXTRA": { availability: { mode: "Daily" }, postNextDay: false } };
+    const { calls, restore } = installExtensionFetchMock({
+      reservation,
+      availableNights: [true, false],
+      services,
+      serviceDefinitions,
+    });
+    try {
+      await confirmStayExtension({ reservationId: reservation.id, expectedCurrentDeparture: "2026-10-13" });
+      assert.ok(!calls.some((c) => c.pathname.endsWith("/book-service")));
+      const records = await listExtensionRecords();
+      assert.equal(records[0].lateCheckoutMoves.length, 0);
+    } finally {
+      restore();
+    }
+  });
+});
+
+test("confirmStayExtension: a mandatory departure-day service (e.g. final cleaning) is never moved", async () => {
+  await withCleanLocalDb(async () => {
+    await saveExtensionConfig("TESTPROP", {
+      extensionNightEnabled: true,
+      extensionDiscountOneNightGap: 20,
+      extensionDiscountStandard: 15,
+      minSellableStayNights: 2,
+    });
+    const reservation = reservationFixture();
+    const services = [serviceEntry("FINALCLEAN", [["2026-10-13", 119]], { mandatory: true })];
+    const serviceDefinitions = { FINALCLEAN: { availability: { mode: "Departure" }, postNextDay: false } };
+    const { calls, restore } = installExtensionFetchMock({
+      reservation,
+      availableNights: [true, false],
+      services,
+      serviceDefinitions,
+    });
+    try {
+      await confirmStayExtension({ reservationId: reservation.id, expectedCurrentDeparture: "2026-10-13" });
+      assert.ok(!calls.some((c) => c.pathname.endsWith("/book-service")));
+      const records = await listExtensionRecords();
+      assert.equal(records[0].lateCheckoutMoves.length, 0);
+      assert.equal(records[0].mandatoryServicesIntact, true);
+    } finally {
+      restore();
+    }
+  });
+});
+
+test("confirmStayExtension: a Departure-mode service without postNextDay: true is never moved", async () => {
+  await withCleanLocalDb(async () => {
+    await saveExtensionConfig("TESTPROP", {
+      extensionNightEnabled: true,
+      extensionDiscountOneNightGap: 20,
+      extensionDiscountStandard: 15,
+      minSellableStayNights: 2,
+    });
+    const reservation = reservationFixture();
+    const services = [serviceEntry("SOME-DEP-EXTRA", [["2026-10-13", 30]])];
+    const serviceDefinitions = { "SOME-DEP-EXTRA": { availability: { mode: "Departure" }, postNextDay: false } };
+    const { calls, restore } = installExtensionFetchMock({
+      reservation,
+      availableNights: [true, false],
+      services,
+      serviceDefinitions,
+    });
+    try {
+      await confirmStayExtension({ reservationId: reservation.id, expectedCurrentDeparture: "2026-10-13" });
+      assert.ok(!calls.some((c) => c.pathname.endsWith("/book-service")));
+      const records = await listExtensionRecords();
+      assert.equal(records[0].lateCheckoutMoves.length, 0);
+    } finally {
+      restore();
+    }
+  });
+});
+
+test("confirmStayExtension: a failed Late-Checkout move never rolls back the accommodation extension, and is recorded for staff follow-up", async () => {
+  await withCleanLocalDb(async () => {
+    await saveExtensionConfig("TESTPROP", {
+      extensionNightEnabled: true,
+      extensionDiscountOneNightGap: 20,
+      extensionDiscountStandard: 15,
+      minSellableStayNights: 2,
+    });
+    const reservation = reservationFixture();
+    const services = [serviceEntry("HUESLE-LCO", [["2026-10-13", 20]])];
+    const serviceDefinitions = { "HUESLE-LCO": { availability: { mode: "Departure" }, postNextDay: true } };
+    const { calls, restore } = installExtensionFetchMock({
+      reservation,
+      availableNights: [true, false],
+      services,
+      serviceDefinitions,
+      bookServiceHandler: () => new Response(JSON.stringify({ message: "boom" }), { status: 500 }),
+    });
+    try {
+      const result = await confirmStayExtension({ reservationId: reservation.id, expectedCurrentDeparture: "2026-10-13" });
+      assert.equal(result.newDeparture, "2026-10-14", "accommodation extension still succeeds");
+      assert.equal(calls.filter((c) => c.pathname.endsWith("/amend")).length, 1);
+
+      const records = await listExtensionRecords();
+      assert.equal(records[0].lateCheckoutMoves.length, 1);
+      assert.equal(records[0].lateCheckoutMoves[0].moved, false);
+      assert.equal(records[0].lateCheckoutMoves[0].verified, false);
+      assert.equal(records[0].status, "confirmed_with_issues");
     } finally {
       restore();
     }
