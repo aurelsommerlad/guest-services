@@ -508,7 +508,7 @@ function RequestCatalogItem({ item, language, reservationId, lastName, guestName
 // (same pattern as RequestCatalogItem above), so it can be shown or
 // omitted independently of the rest of the catalog's state (empty, past
 // stay, etc.).
-function StayExtensionCard({ language, offer, reservationId, lastName, onExtended }) {
+function useStayExtensionConfirm({ reservationId, lastName, offer, language, onExtended }) {
   // idle -> submitting -> success, or -> error (back to idle)
   const [status, setStatus] = useState("idle");
   const [error, setError] = useState("");
@@ -531,17 +531,26 @@ function StayExtensionCard({ language, offer, reservationId, lastName, onExtende
     }
   }
 
-  if (status === "success") {
-    return (
-      <div className="rounded-lg border border-stone-200 bg-white p-4 sm:p-6">
-        <h3 className={`${HEADING_CLASS} break-words text-base text-stone-900 sm:text-lg`}>
-          {t(language, "stayExtensionTitle")}
-        </h3>
-        <p className="mt-2 break-words text-sm text-stone-600">{t(language, "stayExtensionSuccessMessage")}</p>
-      </div>
-    );
-  }
+  return { status, error, handleConfirm };
+}
 
+function StayExtensionSuccessNotice({ language }) {
+  return (
+    <div className="rounded-lg border border-stone-200 bg-white p-4 sm:p-6">
+      <h3 className={`${HEADING_CLASS} break-words text-base text-stone-900 sm:text-lg`}>
+        {t(language, "stayExtensionTitle")}
+      </h3>
+      <p className="mt-2 break-words text-sm text-stone-600">{t(language, "stayExtensionSuccessMessage")}</p>
+    </div>
+  );
+}
+
+// The price breakdown — reused verbatim by both the full (in-house) card
+// and the compact (pre-arrival) card's expanded confirmation area, so a
+// guest on either variant sees the exact same figures computed the exact
+// same way (lib/stayExtension.js's buildExtensionOffer/
+// buildExtensionPricePreview) before ever being able to confirm anything.
+function StayExtensionBreakdown({ language, offer }) {
   const extras = offer.extras || [];
   const cityTax = offer.cityTax || null;
   const totalPrice = offer.totalPrice || offer.extensionPrice;
@@ -554,7 +563,65 @@ function StayExtensionCard({ language, offer, reservationId, lastName, onExtende
   };
 
   return (
-    <div className="rounded-lg border border-stone-200 bg-white p-4 sm:p-6">
+    <div className="mt-4 space-y-2 rounded-md bg-stone-50 p-3 text-sm sm:p-4">
+      <div>
+        <div className="flex items-baseline justify-between gap-2">
+          <span className="break-words text-stone-700">{t(language, "stayExtensionAccommodationLabel")}</span>
+          <span className="whitespace-nowrap text-base font-semibold text-stone-900">
+            {formatPrice(offer.extensionPrice, language)}
+          </span>
+        </div>
+        <div className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-1">
+          <span className="whitespace-nowrap text-xs text-stone-400 line-through">
+            {formatPrice(offer.averageNightlyRate, language)}
+          </span>
+          {/* Small pill for the discount percentage only; the concrete
+              saving follows as plain (unboxed) colored text, so it can
+              still wrap onto its own line on narrow screens without the
+              pill itself ever growing to fit it. */}
+          <span className="whitespace-nowrap rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-700">
+            {offer.discountPercent}
+            {t(language, "stayExtensionDiscountSuffix")}
+          </span>
+          <span className="text-xs font-medium text-emerald-600">
+            · {t(language, "stayExtensionSavingsPrefix")}
+            {formatPrice(accommodationSaving, language)}
+            {t(language, "stayExtensionSavingsSuffix")}
+          </span>
+        </div>
+      </div>
+
+      {extras.map((extra) => (
+        <div key={extra.serviceId} className="flex items-center justify-between gap-2">
+          <span className="break-words text-stone-700">{extra.name?.[language] || extra.name?.de}</span>
+          <span className="whitespace-nowrap text-stone-900">{formatPrice(extra.amount, language)}</span>
+        </div>
+      ))}
+      {cityTax && (
+        <div className="flex items-center justify-between gap-2">
+          <span className="break-words text-stone-700">{t(language, "stayExtensionCityTaxLabel")}</span>
+          <span className="whitespace-nowrap text-stone-900">{formatPrice(cityTax, language)}</span>
+        </div>
+      )}
+
+      <div className="flex items-center justify-between gap-2 border-t border-stone-200 pt-2">
+        <span className="break-words font-semibold text-stone-900">{t(language, "stayExtensionTotalLabel")}</span>
+        <span className="whitespace-nowrap text-xl font-semibold text-stone-900">
+          {formatPrice(totalPrice, language)}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+// The full details block: title, subtitle, new departure, the complete
+// price breakdown, and the actual confirm action. Shared by the in-house
+// card (always shown) and the compact card's expanded state (shown only
+// after the guest chooses to see it) — the confirm button here is the one
+// and only place that actually extends the stay.
+function StayExtensionFullDetails({ language, offer, status, error, onConfirm }) {
+  return (
+    <>
       <h3 className={`${HEADING_CLASS} break-words text-base text-stone-900 sm:text-lg`}>
         {t(language, "stayExtensionTitle")}
       </h3>
@@ -567,71 +634,102 @@ function StayExtensionCard({ language, offer, reservationId, lastName, onExtende
         <p className="break-words text-sm font-medium text-stone-900">{formatDate(offer.newDeparture, language)}</p>
       </div>
 
-      {/* Price breakdown — the ONLY price display on this card. The
-          accommodation line carries its own regular/discounted/savings
-          detail directly underneath it (the discount applies to
-          accommodation only, never to extras/city tax below it); the total
-          row is the single most prominent number on the card. */}
-      <div className="mt-4 space-y-2 rounded-md bg-stone-50 p-3 text-sm sm:p-4">
-        <div>
-          <div className="flex items-baseline justify-between gap-2">
-            <span className="break-words text-stone-700">{t(language, "stayExtensionAccommodationLabel")}</span>
-            <span className="whitespace-nowrap text-base font-semibold text-stone-900">
-              {formatPrice(offer.extensionPrice, language)}
-            </span>
-          </div>
-          <div className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-1">
-            <span className="whitespace-nowrap text-xs text-stone-400 line-through">
-              {formatPrice(offer.averageNightlyRate, language)}
-            </span>
-            {/* Small pill for the discount percentage only; the concrete
-                saving follows as plain (unboxed) colored text, so it can
-                still wrap onto its own line on narrow screens without the
-                pill itself ever growing to fit it. */}
-            <span className="whitespace-nowrap rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-700">
-              {offer.discountPercent}
-              {t(language, "stayExtensionDiscountSuffix")}
-            </span>
-            <span className="text-xs font-medium text-emerald-600">
-              · {t(language, "stayExtensionSavingsPrefix")}
-              {formatPrice(accommodationSaving, language)}
-              {t(language, "stayExtensionSavingsSuffix")}
-            </span>
-          </div>
-        </div>
-
-        {extras.map((extra) => (
-          <div key={extra.serviceId} className="flex items-center justify-between gap-2">
-            <span className="break-words text-stone-700">{extra.name?.[language] || extra.name?.de}</span>
-            <span className="whitespace-nowrap text-stone-900">{formatPrice(extra.amount, language)}</span>
-          </div>
-        ))}
-        {cityTax && (
-          <div className="flex items-center justify-between gap-2">
-            <span className="break-words text-stone-700">{t(language, "stayExtensionCityTaxLabel")}</span>
-            <span className="whitespace-nowrap text-stone-900">{formatPrice(cityTax, language)}</span>
-          </div>
-        )}
-
-        <div className="flex items-center justify-between gap-2 border-t border-stone-200 pt-2">
-          <span className="break-words font-semibold text-stone-900">{t(language, "stayExtensionTotalLabel")}</span>
-          <span className="whitespace-nowrap text-xl font-semibold text-stone-900">
-            {formatPrice(totalPrice, language)}
-          </span>
-        </div>
-      </div>
+      <StayExtensionBreakdown language={language} offer={offer} />
 
       {error && <p className="mt-3 break-words text-sm text-red-600">{error}</p>}
 
       <button
         type="button"
-        onClick={handleConfirm}
+        onClick={onConfirm}
         disabled={status === "submitting"}
         className={`${PRIMARY_BUTTON} mt-4`}
       >
         {status === "submitting" ? t(language, "stayExtensionButtonLoading") : t(language, "stayExtensionButton")}
       </button>
+    </>
+  );
+}
+
+// The IN-HOUSE variant — unchanged in appearance from before: large,
+// prominent, full price breakdown always visible. Shown once the guest's
+// stay has actually started (offer.phase === "in_house", see
+// lib/stayExtension.js's determineStayExtensionPhase).
+function StayExtensionCard({ language, offer, reservationId, lastName, onExtended }) {
+  const { status, error, handleConfirm } = useStayExtensionConfirm({ reservationId, lastName, offer, language, onExtended });
+
+  if (status === "success") {
+    return <StayExtensionSuccessNotice language={language} />;
+  }
+
+  return (
+    <div className="rounded-lg border border-stone-200 bg-white p-4 sm:p-6">
+      <StayExtensionFullDetails language={language} offer={offer} status={status} error={error} onConfirm={handleConfirm} />
     </div>
+  );
+}
+
+// The BEFORE-ARRIVAL variant — deliberately small and discreet (see the
+// business rule this implements) so the offer never visually dominates
+// the normal extras catalog before the stay has started. Never shows
+// extras/city tax/total up front: clicking the button here only expands
+// to reveal the exact same StayExtensionFullDetails used by the in-house
+// card above — the guest always sees the complete total before the second,
+// actual confirm click.
+function StayExtensionCompactCard({ language, offer, reservationId, lastName, onExtended }) {
+  const [expanded, setExpanded] = useState(false);
+  const { status, error, handleConfirm } = useStayExtensionConfirm({ reservationId, lastName, offer, language, onExtended });
+
+  if (status === "success") {
+    return <StayExtensionSuccessNotice language={language} />;
+  }
+
+  if (expanded) {
+    return (
+      <div className="rounded-lg border border-stone-200 bg-white p-4 sm:p-6">
+        <StayExtensionFullDetails language={language} offer={offer} status={status} error={error} onConfirm={handleConfirm} />
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-lg border border-stone-200 bg-white p-3 sm:p-4">
+      <h3 className={`${HEADING_CLASS} break-words text-sm text-stone-900`}>{t(language, "stayExtensionTitle")}</h3>
+      <p className="mt-1 break-words text-xs text-stone-500">{t(language, "stayExtensionCompactSubtitle")}</p>
+
+      <div className="mt-2">
+        <p className="break-words text-xs uppercase tracking-wide text-stone-400">
+          {t(language, "stayExtensionNewDepartureLabel")}
+        </p>
+        <p className="break-words text-xs font-medium text-stone-900">{formatDate(offer.newDeparture, language)}</p>
+      </div>
+
+      <div className="mt-2 flex flex-wrap items-baseline gap-x-2 gap-y-1">
+        <span className="whitespace-nowrap text-xs text-stone-400 line-through">
+          {formatPrice(offer.averageNightlyRate, language)}
+        </span>
+        <span className="whitespace-nowrap text-sm font-semibold text-stone-900">
+          {formatPrice(offer.extensionPrice, language)}
+        </span>
+        <span className="whitespace-nowrap rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-700">
+          {offer.discountPercent}
+          {t(language, "stayExtensionDiscountSuffix")}
+        </span>
+      </div>
+
+      <button type="button" onClick={() => setExpanded(true)} className={`${SECONDARY_BUTTON} mt-3`}>
+        {t(language, "stayExtensionButton")}
+      </button>
+    </div>
+  );
+}
+
+// Picks the presentation variant for an already-computed offer — never
+// re-derives eligibility/pricing, only reads offer.phase (see
+// lib/stayExtension.js's determineStayExtensionPhase).
+function StayExtensionOffer({ language, offer, reservationId, lastName, onExtended }) {
+  const Variant = offer.phase === "in_house" ? StayExtensionCard : StayExtensionCompactCard;
+  return (
+    <Variant language={language} offer={offer} reservationId={reservationId} lastName={lastName} onExtended={onExtended} />
   );
 }
 
@@ -985,7 +1083,7 @@ export default function GuestApp() {
             {error && <p className={`mb-4 ${ERROR_BANNER}`}>{error}</p>}
             {extensionOffer && (
               <div className="mb-4">
-                <StayExtensionCard
+                <StayExtensionOffer
                   language={language}
                   offer={extensionOffer}
                   reservationId={reservation?.id}

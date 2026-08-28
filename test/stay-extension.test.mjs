@@ -31,6 +31,7 @@ import {
   findDepartureDateCandidates,
   buildLateCheckoutMoveDates,
   verifyLateCheckoutMove,
+  determineStayExtensionPhase,
 } from "../lib/stayExtension.js";
 
 // ---------------------------------------------------------------------
@@ -397,6 +398,17 @@ test("buildExtensionPricePreview: sums accommodation (already discounted) + extr
 test("buildExtensionPricePreview: with no extras and no city tax, the total equals the accommodation price alone", () => {
   const total = buildExtensionPricePreview({ extensionPrice: { amount: 93.5, currency: "EUR" }, extras: [], cityTax: null });
   assert.deepEqual(total, { amount: 93.5, currency: "EUR" });
+});
+
+test("determineStayExtensionPhase: status 'InHouse' -> in_house (the full, prominent card)", () => {
+  assert.equal(determineStayExtensionPhase("InHouse"), "in_house");
+});
+
+test("determineStayExtensionPhase: 'Confirmed', any other status, or a missing status -> before_arrival (the compact card)", () => {
+  assert.equal(determineStayExtensionPhase("Confirmed"), "before_arrival");
+  assert.equal(determineStayExtensionPhase("CheckedOut"), "before_arrival");
+  assert.equal(determineStayExtensionPhase(undefined), "before_arrival");
+  assert.equal(determineStayExtensionPhase(null), "before_arrival");
 });
 
 test("findDepartureDateCandidates: a non-mandatory single-date service dated at the old departure is a candidate", () => {
@@ -968,6 +980,46 @@ test("getStayExtensionOffer: includes eligible extras and a city tax estimate in
       assert.deepEqual(offer.cityTax, { amount: 4, currency: "EUR" });
       assert.deepEqual(offer.totalPrice, { amount: 128 + 15 + 4, currency: "EUR" });
       assert.ok(!calls.some((c) => c.method !== "GET"), "a preview must never mutate anything");
+    } finally {
+      restore();
+    }
+  });
+});
+
+test("getStayExtensionOffer: an InHouse reservation's offer is tagged phase 'in_house' (full, prominent card)", async () => {
+  await withCleanLocalDb(async () => {
+    await saveExtensionConfig("TESTPROP", {
+      extensionNightEnabled: true,
+      extensionDiscountOneNightGap: 20,
+      extensionDiscountStandard: 15,
+      minSellableStayNights: 2,
+    });
+    const reservation = reservationFixture({ status: "InHouse" });
+    const { restore } = installExtensionFetchMock({ reservation, availableNights: [true, false] });
+    try {
+      const offer = await getStayExtensionOffer(reservation);
+      assert.ok(offer);
+      assert.equal(offer.phase, "in_house");
+    } finally {
+      restore();
+    }
+  });
+});
+
+test("getStayExtensionOffer: a Confirmed (not yet checked in) reservation's offer is tagged phase 'before_arrival' (compact card)", async () => {
+  await withCleanLocalDb(async () => {
+    await saveExtensionConfig("TESTPROP", {
+      extensionNightEnabled: true,
+      extensionDiscountOneNightGap: 20,
+      extensionDiscountStandard: 15,
+      minSellableStayNights: 2,
+    });
+    const reservation = reservationFixture({ status: "Confirmed" });
+    const { restore } = installExtensionFetchMock({ reservation, availableNights: [true, false] });
+    try {
+      const offer = await getStayExtensionOffer(reservation);
+      assert.ok(offer);
+      assert.equal(offer.phase, "before_arrival");
     } finally {
       restore();
     }
