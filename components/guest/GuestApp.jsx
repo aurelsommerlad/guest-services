@@ -588,10 +588,10 @@ function StayExtensionCard({ language, offer, reservationId, lastName, onExtende
               {offer.discountPercent}
               {t(language, "stayExtensionDiscountSuffix")}
             </span>
-            <span className="whitespace-nowrap text-xs text-stone-500">
-              {t(language, "stayExtensionSavingsLabel")} {formatPrice(accommodationSaving, language)}
-            </span>
           </div>
+          <p className="mt-0.5 whitespace-nowrap text-xs font-medium text-stone-600">
+            {t(language, "stayExtensionSavingsLabel")} {formatPrice(accommodationSaving, language)}
+          </p>
         </div>
 
         {extras.map((extra) => (
