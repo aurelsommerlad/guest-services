@@ -400,15 +400,62 @@ test("buildExtensionPricePreview: with no extras and no city tax, the total equa
   assert.deepEqual(total, { amount: 93.5, currency: "EUR" });
 });
 
-test("determineStayExtensionPhase: status 'InHouse' -> in_house (the full, prominent card)", () => {
-  assert.equal(determineStayExtensionPhase("InHouse"), "in_house");
+test("determineStayExtensionPhase: status 'InHouse' -> in_house (the full, prominent card), regardless of dates", () => {
+  assert.equal(determineStayExtensionPhase({ status: "InHouse" }), "in_house");
+  assert.equal(
+    determineStayExtensionPhase({
+      status: "InHouse",
+      arrivalDate: "2026-12-01",
+      departureDate: "2026-12-05",
+      today: new Date("2026-01-01T00:00:00Z"),
+    }),
+    "in_house"
+  );
 });
 
-test("determineStayExtensionPhase: 'Confirmed', any other status, or a missing status -> before_arrival (the compact card)", () => {
-  assert.equal(determineStayExtensionPhase("Confirmed"), "before_arrival");
-  assert.equal(determineStayExtensionPhase("CheckedOut"), "before_arrival");
-  assert.equal(determineStayExtensionPhase(undefined), "before_arrival");
-  assert.equal(determineStayExtensionPhase(null), "before_arrival");
+test("determineStayExtensionPhase: not yet InHouse, but arrival has passed and departure is still in the future -> in_house (date fallback)", () => {
+  const phase = determineStayExtensionPhase({
+    status: "Confirmed",
+    arrivalDate: "2026-10-10",
+    departureDate: "2026-10-13",
+    today: new Date("2026-10-11T00:00:00Z"),
+  });
+  assert.equal(phase, "in_house");
+});
+
+test("determineStayExtensionPhase: arrival is today -> already in_house (arrival inclusive)", () => {
+  const phase = determineStayExtensionPhase({
+    status: "Confirmed",
+    arrivalDate: "2026-10-10",
+    departureDate: "2026-10-13",
+    today: new Date("2026-10-10T00:00:00Z"),
+  });
+  assert.equal(phase, "in_house");
+});
+
+test("determineStayExtensionPhase: departure is today -> no longer in_house (departure exclusive)", () => {
+  const phase = determineStayExtensionPhase({
+    status: "Confirmed",
+    arrivalDate: "2026-10-10",
+    departureDate: "2026-10-13",
+    today: new Date("2026-10-13T00:00:00Z"),
+  });
+  assert.equal(phase, "before_arrival");
+});
+
+test("determineStayExtensionPhase: before arrival, any other status, or missing dates -> before_arrival (the compact card)", () => {
+  assert.equal(
+    determineStayExtensionPhase({
+      status: "Confirmed",
+      arrivalDate: "2026-10-10",
+      departureDate: "2026-10-13",
+      today: new Date("2026-10-05T00:00:00Z"),
+    }),
+    "before_arrival"
+  );
+  assert.equal(determineStayExtensionPhase({ status: "CheckedOut" }), "before_arrival");
+  assert.equal(determineStayExtensionPhase({}), "before_arrival");
+  assert.equal(determineStayExtensionPhase(), "before_arrival");
 });
 
 test("findDepartureDateCandidates: a non-mandatory single-date service dated at the old departure is a candidate", () => {
@@ -1014,7 +1061,15 @@ test("getStayExtensionOffer: a Confirmed (not yet checked in) reservation's offe
       extensionDiscountStandard: 15,
       minSellableStayNights: 2,
     });
-    const reservation = reservationFixture({ status: "Confirmed" });
+    // Arrival deliberately far in the future (unlike the fixture's default
+    // dates) so this test's outcome can never depend on when it happens to
+    // run — determineStayExtensionPhase's date fallback must never fire
+    // here regardless of the real wall-clock date.
+    const reservation = reservationFixture({
+      status: "Confirmed",
+      arrival: "2030-01-01T14:00:00+01:00",
+      departure: "2030-01-04T11:00:00+01:00",
+    });
     const { restore } = installExtensionFetchMock({ reservation, availableNights: [true, false] });
     try {
       const offer = await getStayExtensionOffer(reservation);

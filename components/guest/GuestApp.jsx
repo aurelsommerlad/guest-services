@@ -703,18 +703,18 @@ function StayExtensionCompactCard({ language, offer, reservationId, lastName, on
         <p className="break-words text-xs font-medium text-stone-900">{formatDate(offer.newDeparture, language)}</p>
       </div>
 
-      <div className="mt-2 flex flex-wrap items-baseline gap-x-2 gap-y-1">
+      <div className="mt-2 flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
         <span className="whitespace-nowrap text-xs text-stone-400 line-through">
           {formatPrice(offer.averageNightlyRate, language)}
         </span>
         <span className="whitespace-nowrap text-sm font-semibold text-stone-900">
           {formatPrice(offer.extensionPrice, language)}
         </span>
-        <span className="whitespace-nowrap rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-700">
-          {offer.discountPercent}
-          {t(language, "stayExtensionDiscountSuffix")}
-        </span>
       </div>
+      <span className="mt-1 inline-block whitespace-nowrap rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-700">
+        {offer.discountPercent}
+        {t(language, "stayExtensionDiscountSuffix")}
+      </span>
 
       <button type="button" onClick={() => setExpanded(true)} className={`${SECONDARY_BUTTON} mt-3`}>
         {t(language, "stayExtensionButton")}
