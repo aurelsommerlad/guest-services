@@ -580,17 +580,20 @@ function StayExtensionCard({ language, offer, reservationId, lastName, onExtende
               {formatPrice(offer.extensionPrice, language)}
             </span>
           </div>
-          <div className="mt-1 flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+          <div className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-1">
             <span className="whitespace-nowrap text-xs text-stone-400 line-through">
               {formatPrice(offer.averageNightlyRate, language)}
             </span>
-            {/* No pill/background — a lightly highlighted, same-size text
-                treatment reads more subtle/premium than a chip, and (unlike
-                a fixed-width badge) wraps gracefully on narrow screens
-                instead of ever overflowing the card. */}
-            <span className="text-xs font-medium text-emerald-700">
+            {/* Small pill for the discount percentage only; the concrete
+                saving follows as plain (unboxed) colored text, so it can
+                still wrap onto its own line on narrow screens without the
+                pill itself ever growing to fit it. */}
+            <span className="whitespace-nowrap rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-700">
               {offer.discountPercent}
-              {t(language, "stayExtensionDiscountSuffix")} · {t(language, "stayExtensionSavingsPrefix")}
+              {t(language, "stayExtensionDiscountSuffix")}
+            </span>
+            <span className="text-xs font-medium text-emerald-600">
+              · {t(language, "stayExtensionSavingsPrefix")}
               {formatPrice(accommodationSaving, language)}
               {t(language, "stayExtensionSavingsSuffix")}
             </span>
