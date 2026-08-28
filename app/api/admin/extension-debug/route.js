@@ -7,6 +7,7 @@ import {
   isPastDate,
   getUnitGroupNightlyAvailability,
   isUnitAvailable,
+  ApaleoApiError,
 } from "@/lib/apaleo";
 import { getExtensionConfig } from "@/lib/store";
 import { getReservationUnitGroupId } from "@/lib/unitGroupRestriction";
@@ -75,8 +76,14 @@ export async function GET(request) {
       extensionPrice: null,
     },
     finalOfferObject: null,
+    apaleoFailure: null,
     suppressionReason: null,
   };
+
+  // Updated right before every awaited call so a thrown ApaleoApiError can
+  // be attributed to the exact step that made it, without having to guess
+  // from the stack trace.
+  let currentStep = "getReservationForExtension";
 
   try {
     // Same call the guest path makes (lib/guest.js's getStayExtensionOffer),
@@ -98,6 +105,7 @@ export async function GET(request) {
     }
 
     // --- Condition 1: property config (getStayExtensionOffer's first check) --
+    currentStep = "getExtensionConfig";
     const config = await getExtensionConfig(trace.propertyId);
     trace.config = config;
     if (!config.extensionNightEnabled) {
@@ -151,6 +159,7 @@ export async function GET(request) {
     // this loop.
     const lookaheadNights = Math.max(Number(config.minSellableStayNights) || 0, 0) + 1;
     const rangeEnd = addDaysUTC(trace.departure, lookaheadNights);
+    currentStep = `getUnitGroupNightlyAvailability(${trace.propertyId}, ${unitGroupId}, ${trace.departure} -> ${rangeEnd})`;
     const nightly = rangeEnd
       ? await getUnitGroupNightlyAvailability(trace.propertyId, unitGroupId, trace.departure, rangeEnd)
       : [];
@@ -163,6 +172,7 @@ export async function GET(request) {
       }
       let assignedUnitAvailable = null;
       if (assignedUnitId && groupAvailableCount > 0) {
+        currentStep = `isUnitAvailable(${entry?.from} -> ${entry?.to})`;
         assignedUnitAvailable = await isUnitAvailable(
           trace.propertyId,
           unitGroupId,
@@ -184,6 +194,7 @@ export async function GET(request) {
       : trace.assignment.physicalCount === 1;
 
     // --- The actual gap, via the real function the guest path calls --
+    currentStep = "determineConsecutiveFreeNights";
     const gap = await determineConsecutiveFreeNights({
       propertyId: trace.propertyId,
       unitGroupId,
@@ -222,6 +233,7 @@ export async function GET(request) {
     // --- Cross-check: call the exact function the guest catalog route
     // calls, so this trace can never silently diverge from the real
     // response the guest actually receives.
+    currentStep = "getStayExtensionOffer";
     const finalOffer = await getStayExtensionOffer(fresh);
     trace.finalOfferObject = finalOffer;
     trace.suppressionReason = finalOffer
@@ -230,7 +242,22 @@ export async function GET(request) {
 
     return NextResponse.json(trace);
   } catch (err) {
-    trace.suppressionReason = `exception: ${err?.message || String(err)}`;
+    if (err instanceof ApaleoApiError) {
+      // Never includes the Authorization header or the client secret —
+      // apaleoFetch (lib/apaleo.js) never attaches those to the error it
+      // throws, only the request path/query and Apaleo's own JSON error
+      // body.
+      trace.apaleoFailure = {
+        failedStep: currentStep,
+        method: err.method,
+        endpoint: err.endpoint,
+        status: err.status,
+        apaleoError: err.body,
+      };
+      trace.suppressionReason = `apaleo_error_${err.status}`;
+    } else {
+      trace.suppressionReason = `exception: ${err?.message || String(err)}`;
+    }
     return NextResponse.json(trace);
   }
 }
