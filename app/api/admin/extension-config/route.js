@@ -1,6 +1,30 @@
+import crypto from "crypto";
 import { NextResponse } from "next/server";
 import { requireRole } from "@/lib/auth";
-import { getExtensionConfig, saveExtensionConfig } from "@/lib/store";
+import { isUsingKv } from "@/lib/db";
+import {
+  extensionConfigKey,
+  getExtensionConfig,
+  getRawExtensionConfig,
+  saveExtensionConfig,
+} from "@/lib/store";
+
+// TEMPORARY: _debug is only added here to make it easy to compare this
+// admin response against /api/admin/extension-config/debug from the same
+// browser session while investigating a KV-environment discrepancy. It is
+// admin/manager-gated exactly like the rest of this route and is never
+// added to any guest-facing endpoint. Remove once that investigation is
+// closed out.
+function buildDebugInfo(propertyId, rawStoredConfig) {
+  return {
+    kvConfigured: isUsingKv(),
+    kvUrlFingerprint: process.env.KV_REST_API_URL
+      ? crypto.createHash("sha256").update(process.env.KV_REST_API_URL).digest("hex").slice(0, 16)
+      : null,
+    key: extensionConfigKey(propertyId),
+    rawStoredConfig,
+  };
+}
 
 export async function GET(request) {
   const { error } = await requireRole(["admin", "manager"]);
@@ -11,8 +35,11 @@ export async function GET(request) {
     return NextResponse.json({ error: "propertyId ist erforderlich." }, { status: 400 });
   }
 
-  const config = await getExtensionConfig(propertyId);
-  return NextResponse.json({ config });
+  const [rawStoredConfig, config] = await Promise.all([
+    getRawExtensionConfig(propertyId),
+    getExtensionConfig(propertyId),
+  ]);
+  return NextResponse.json({ config, _debug: buildDebugInfo(propertyId, rawStoredConfig) });
 }
 
 export async function POST(request) {
