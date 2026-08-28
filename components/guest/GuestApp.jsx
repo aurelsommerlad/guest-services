@@ -542,6 +542,14 @@ function StayExtensionCard({ language, offer, reservationId, lastName, onExtende
     );
   }
 
+  const extras = offer.extras || [];
+  const cityTax = offer.cityTax || null;
+  const totalPrice = offer.totalPrice || offer.extensionPrice;
+  // Only shown when there's actually something to itemize — a reservation
+  // with no extendable extras and no city tax just shows the simple
+  // regular-price/total-price footer, same as before.
+  const hasBreakdown = extras.length > 0 || Boolean(cityTax);
+
   return (
     <div className="rounded-lg border border-stone-200 bg-white p-4 sm:p-6">
       <h3 className={`${HEADING_CLASS} break-words text-base text-stone-900 sm:text-lg`}>
@@ -549,34 +557,66 @@ function StayExtensionCard({ language, offer, reservationId, lastName, onExtende
       </h3>
       <p className="mt-1 break-words text-sm text-stone-500">{t(language, "stayExtensionSubtitle")}</p>
 
+      <div className="mt-4">
+        <p className="break-words text-xs uppercase tracking-wide text-stone-400">
+          {t(language, "stayExtensionNewDepartureLabel")}
+        </p>
+        <p className="break-words text-sm font-medium text-stone-900">{formatDate(offer.newDeparture, language)}</p>
+      </div>
+
+      {hasBreakdown && (
+        <div className="mt-4 space-y-1.5 rounded-md bg-stone-50 p-3 text-sm">
+          <div className="flex items-center justify-between gap-2">
+            <span className="break-words text-stone-700">{t(language, "stayExtensionAccommodationLabel")}</span>
+            <span className="flex items-center gap-2">
+              <span className="whitespace-nowrap rounded bg-emerald-100 px-1.5 py-0.5 text-xs font-medium text-emerald-700">
+                {offer.discountPercent}
+                {t(language, "stayExtensionDiscountSuffix")}
+              </span>
+              <span className="whitespace-nowrap font-medium text-stone-900">
+                {formatPrice(offer.extensionPrice, language)}
+              </span>
+            </span>
+          </div>
+          {extras.map((extra) => (
+            <div key={extra.serviceId} className="flex items-center justify-between gap-2">
+              <span className="break-words text-stone-700">{extra.name?.[language] || extra.name?.de}</span>
+              <span className="whitespace-nowrap text-stone-900">{formatPrice(extra.amount, language)}</span>
+            </div>
+          ))}
+          {cityTax && (
+            <div className="flex items-center justify-between gap-2">
+              <span className="break-words text-stone-700">{t(language, "stayExtensionCityTaxLabel")}</span>
+              <span className="whitespace-nowrap text-stone-900">{formatPrice(cityTax, language)}</span>
+            </div>
+          )}
+          <div className="flex items-center justify-between gap-2 border-t border-stone-200 pt-1.5 font-semibold">
+            <span className="break-words text-stone-900">{t(language, "stayExtensionTotalLabel")}</span>
+            <span className="whitespace-nowrap text-stone-900">{formatPrice(totalPrice, language)}</span>
+          </div>
+        </div>
+      )}
+
       <div className="mt-4 flex flex-wrap items-end justify-between gap-4">
-        <div className="min-w-0 space-y-3">
-          <div>
-            <p className="break-words text-xs uppercase tracking-wide text-stone-400">
-              {t(language, "stayExtensionNewDepartureLabel")}
-            </p>
-            <p className="break-words text-sm font-medium text-stone-900">{formatDate(offer.newDeparture, language)}</p>
-          </div>
-          <div>
-            <p className="break-words text-xs uppercase tracking-wide text-stone-400">
-              {t(language, "stayExtensionAverageRateLabel")}
-            </p>
-            <p className="break-words text-sm font-medium text-stone-900">
-              {formatPrice(offer.averageNightlyRate, language)}
-            </p>
-          </div>
+        <div className="min-w-0">
+          <p className="break-words text-xs uppercase tracking-wide text-stone-400">
+            {t(language, "stayExtensionAverageRateLabel")}
+          </p>
+          <p className="break-words text-sm font-medium text-stone-500 line-through">
+            {formatPrice(offer.averageNightlyRate, language)}
+          </p>
         </div>
         <div className="min-w-0 text-right">
           <p className="break-words text-xs uppercase tracking-wide text-stone-400">
             {t(language, "stayExtensionPriceLabel")}
           </p>
-          <p className="break-words text-2xl font-semibold text-stone-900">
-            {formatPrice(offer.extensionPrice, language)}
-          </p>
-          <p className="mt-0.5 break-words text-xs font-medium text-stone-600">
-            {offer.discountPercent}
-            {t(language, "stayExtensionDiscountSuffix")}
-          </p>
+          <p className="break-words text-2xl font-semibold text-stone-900">{formatPrice(totalPrice, language)}</p>
+          {!hasBreakdown && (
+            <p className="mt-0.5 break-words text-xs font-medium text-stone-600">
+              {offer.discountPercent}
+              {t(language, "stayExtensionDiscountSuffix")}
+            </p>
+          )}
         </div>
       </div>
 

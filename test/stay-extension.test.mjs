@@ -24,6 +24,10 @@ import {
   buildExtensionOffer,
   buildStayExtensionAmendmentPayload,
   addOneDay,
+  findExtendableServices,
+  buildServiceExtensionDates,
+  findCityTaxAmount,
+  buildExtensionPricePreview,
 } from "../lib/stayExtension.js";
 
 // ---------------------------------------------------------------------
@@ -244,6 +248,155 @@ test("buildStayExtensionAmendmentPayload: refuses on a negative extension price"
 });
 
 // ---------------------------------------------------------------------
+// 1b. Pure unit tests: per-night extras, city tax preview/verification,
+//     and the total price preview (section 2/6/7 of the follow-up spec).
+// ---------------------------------------------------------------------
+
+function serviceEntry(id, dates, { name = id, mandatory = false } = {}) {
+  return {
+    service: { id, code: id, name },
+    dates: dates.map(([serviceDate, amount, count = 1]) => ({
+      serviceDate,
+      count,
+      amount: { grossAmount: amount, currency: "EUR" },
+      isMandatory: mandatory,
+    })),
+  };
+}
+
+test("findExtendableServices: a per-night extra covering every original night is eligible for extension", () => {
+  const services = [serviceEntry("HUND", [["2026-10-10", 15], ["2026-10-11", 15], ["2026-10-12", 15]])];
+  const { toExtend, alreadyExtended } = findExtendableServices({
+    services,
+    arrivalDate: "2026-10-10",
+    oldDepartureDate: "2026-10-13",
+    newDate: "2026-10-13",
+  });
+  assert.equal(toExtend.length, 1);
+  assert.equal(alreadyExtended.length, 0);
+  assert.equal(toExtend[0].serviceId, "HUND");
+  assert.deepEqual(toExtend[0].normalPricePerNight, { amount: 15, currency: "EUR" });
+  assert.equal(toExtend[0].existingDates.length, 3);
+});
+
+test("findExtendableServices: a mandatory service (e.g. final cleaning) is never touched, even if dated at the old departure", () => {
+  const services = [serviceEntry("FINALCLEAN", [["2026-10-13", 119]], { mandatory: true })];
+  const { toExtend, alreadyExtended } = findExtendableServices({
+    services,
+    arrivalDate: "2026-10-10",
+    oldDepartureDate: "2026-10-13",
+    newDate: "2026-10-13",
+  });
+  assert.equal(toExtend.length, 0);
+  assert.equal(alreadyExtended.length, 0);
+});
+
+test("findExtendableServices: a single-date arrival/departure-tied service (early check-in, late check-out) is never touched", () => {
+  const services = [
+    serviceEntry("ECI", [["2026-10-10", 25]]),
+    serviceEntry("LCO", [["2026-10-13", 20]]),
+  ];
+  const { toExtend, alreadyExtended } = findExtendableServices({
+    services,
+    arrivalDate: "2026-10-10",
+    oldDepartureDate: "2026-10-13",
+    newDate: "2026-10-13",
+  });
+  assert.equal(toExtend.length, 0);
+  assert.equal(alreadyExtended.length, 0);
+});
+
+test("findExtendableServices: a service whose dates already include the new night is reported as already extended, not re-extended", () => {
+  const services = [
+    serviceEntry("HUND", [["2026-10-10", 15], ["2026-10-11", 15], ["2026-10-12", 15], ["2026-10-13", 15]]),
+  ];
+  const { toExtend, alreadyExtended } = findExtendableServices({
+    services,
+    arrivalDate: "2026-10-10",
+    oldDepartureDate: "2026-10-13",
+    newDate: "2026-10-13",
+  });
+  assert.equal(toExtend.length, 0);
+  assert.equal(alreadyExtended.length, 1);
+  assert.equal(alreadyExtended[0].serviceId, "HUND");
+});
+
+test("findExtendableServices: a partial subset of nights (a genuine one-off booking) is never touched", () => {
+  const services = [serviceEntry("HUND", [["2026-10-11", 15]])]; // only the middle night, not every night
+  const { toExtend, alreadyExtended } = findExtendableServices({
+    services,
+    arrivalDate: "2026-10-10",
+    oldDepartureDate: "2026-10-13",
+    newDate: "2026-10-13",
+  });
+  assert.equal(toExtend.length, 0);
+  assert.equal(alreadyExtended.length, 0);
+});
+
+test("findExtendableServices: supports any future per-night extra without hardcoding service ids", () => {
+  const services = [serviceEntry("SOME-FUTURE-EXTRA", [["2026-10-10", 9], ["2026-10-11", 9], ["2026-10-12", 9]])];
+  const { toExtend } = findExtendableServices({
+    services,
+    arrivalDate: "2026-10-10",
+    oldDepartureDate: "2026-10-13",
+    newDate: "2026-10-13",
+  });
+  assert.equal(toExtend.length, 1);
+  assert.equal(toExtend[0].serviceId, "SOME-FUTURE-EXTRA");
+});
+
+test("buildServiceExtensionDates: existing dates keep their own recorded amount unchanged; only the new date gets the normal price", () => {
+  const existingDates = [
+    { serviceDate: "2026-10-10", count: 1, amount: { amount: 15, currency: "EUR" } },
+    { serviceDate: "2026-10-11", count: 1, amount: { amount: 15, currency: "EUR" } },
+  ];
+  const dates = buildServiceExtensionDates({
+    existingDates,
+    newDate: "2026-10-12",
+    normalPricePerNight: { amount: 15, currency: "EUR" },
+  });
+  assert.equal(dates.length, 3);
+  assert.deepEqual(dates.slice(0, 2), existingDates);
+  assert.deepEqual(dates[2], { serviceDate: "2026-10-12", count: 1, amount: { amount: 15, currency: "EUR" } });
+});
+
+test("findCityTaxAmount: finds the CityTax charge for a specific night among mixed folio charge types", () => {
+  const folios = [
+    {
+      charges: [
+        { type: "TimeSlice", serviceDate: "2026-10-12", amount: { grossAmount: 91.13, currency: "EUR" } },
+        { type: "CityTax", serviceDate: "2026-10-12", amount: { grossAmount: 4, currency: "EUR" } },
+        { type: "ExtraService", serviceDate: "2026-10-12", amount: { grossAmount: 15, currency: "EUR" } },
+      ],
+    },
+  ];
+  assert.deepEqual(findCityTaxAmount(folios, "2026-10-12"), { amount: 4, currency: "EUR" });
+});
+
+test("findCityTaxAmount: returns null when no CityTax charge exists for that night (not subject, or verification failure)", () => {
+  const folios = [{ charges: [{ type: "TimeSlice", serviceDate: "2026-10-12", amount: { grossAmount: 91.13, currency: "EUR" } }] }];
+  assert.equal(findCityTaxAmount(folios, "2026-10-12"), null);
+  assert.equal(findCityTaxAmount([], "2026-10-12"), null);
+});
+
+test("buildExtensionPricePreview: sums accommodation (already discounted) + extras (normal price) + city tax", () => {
+  const total = buildExtensionPricePreview({
+    extensionPrice: { amount: 93.5, currency: "EUR" },
+    extras: [
+      { amount: { amount: 15, currency: "EUR" } },
+      { amount: { amount: 15, currency: "EUR" } },
+    ],
+    cityTax: { amount: 8, currency: "EUR" },
+  });
+  assert.deepEqual(total, { amount: 131.5, currency: "EUR" });
+});
+
+test("buildExtensionPricePreview: with no extras and no city tax, the total equals the accommodation price alone", () => {
+  const total = buildExtensionPricePreview({ extensionPrice: { amount: 93.5, currency: "EUR" }, extras: [], cityTax: null });
+  assert.deepEqual(total, { amount: 93.5, currency: "EUR" });
+});
+
+// ---------------------------------------------------------------------
 // 2. Integration tests: lib/guest.js against a mocked global.fetch
 //    (same technique as test/book-service.test.mjs) + the real local
 //    JSON-fallback DB (see lib/db.js) for the claim lock, extension
@@ -280,11 +433,23 @@ function reservationFixture(overrides = {}) {
 // availableNights: array of booleans, one per night starting at the
 // reservation's departure — true = that night is free (both the unit
 // group and, when a unit is assigned, that exact unit).
-function installExtensionFetchMock({ reservation, availableNights, physicalCount = 1 }) {
+function installExtensionFetchMock({
+  reservation,
+  availableNights,
+  physicalCount = 1,
+  services = [],
+  folios = [],
+  bookServiceHandler = null,
+}) {
   process.env.APALEO_CLIENT_ID ||= "test-client-id";
   process.env.APALEO_CLIENT_SECRET ||= "test-client-secret";
 
   const calls = [];
+  // Reflects amend() calls (departure moving) so a post-amend re-read (see
+  // confirmStayExtension's newDepartureConfirmed check) sees the actual new
+  // state, exactly like the real Apaleo API would — a purely static mock
+  // would make every post-amend verification look like it failed.
+  let currentReservation = { ...reservation };
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async (url, options = {}) => {
     const urlObj = new URL(String(url));
@@ -297,7 +462,7 @@ function installExtensionFetchMock({ reservation, availableNights, physicalCount
     calls.push({ pathname, search: urlObj.search, method: options.method || "GET", body: options.body ? JSON.parse(options.body) : null });
 
     if (pathname === `/booking/v1/reservations/${reservation.id}`) {
-      return new Response(JSON.stringify(reservation), { status: 200 });
+      return new Response(JSON.stringify(currentReservation), { status: 200 });
     }
 
     if (pathname === "/availability/v1/unit-groups") {
@@ -338,7 +503,30 @@ function installExtensionFetchMock({ reservation, availableNights, physicalCount
     }
 
     if (pathname === `/booking/v1/reservation-actions/${reservation.id}/amend`) {
+      const body = JSON.parse(options.body);
+      currentReservation = { ...currentReservation, departure: body.departure };
       return new Response(JSON.stringify({ id: reservation.id }), { status: 200 });
+    }
+
+    if (pathname === `/booking/v1/reservations/${reservation.id}/services`) {
+      return new Response(JSON.stringify({ services }), { status: 200 });
+    }
+
+    if (pathname === "/finance/v1/folios") {
+      return new Response(JSON.stringify({ folios }), { status: 200 });
+    }
+
+    if (pathname === `/booking/v1/reservation-actions/${reservation.id}/book-service`) {
+      if (bookServiceHandler) return bookServiceHandler(JSON.parse(options.body));
+      return new Response(JSON.stringify({ id: reservation.id }), { status: 200 });
+    }
+
+    if (pathname.startsWith("/rateplan/v1/services/")) {
+      // Localized-name lookup for extras shown in the price preview — not
+      // under test here, so just force getServiceLocalized's fallback path
+      // (it catches any error and returns null) rather than mocking a full
+      // localized response.
+      return new Response(JSON.stringify({ message: "not mocked" }), { status: 404 });
     }
 
     throw new Error(`Unexpected mocked fetch call: ${options.method || "GET"} ${pathname}`);
@@ -624,6 +812,245 @@ test("confirmStayExtension: duplicate/concurrent submission — the second call 
         (err) => err.reason === "stay_extension_unavailable"
       );
       assert.equal(calls.length, 0, "a claim-blocked call must never touch Apaleo at all");
+    } finally {
+      restore();
+    }
+  });
+});
+
+// ---------------------------------------------------------------------
+// 3. Integration tests: per-night extras, city tax preview/verification,
+//    price preview totals, and the safe partial-failure/idempotency
+//    behavior of the extended confirmStayExtension workflow.
+// ---------------------------------------------------------------------
+
+test("getStayExtensionOffer: includes eligible extras and a city tax estimate in the price preview, without mutating anything", async () => {
+  await withCleanLocalDb(async () => {
+    await saveExtensionConfig("TESTPROP", {
+      extensionNightEnabled: true,
+      extensionDiscountOneNightGap: 20,
+      extensionDiscountStandard: 15,
+      minSellableStayNights: 2,
+    });
+    const reservation = reservationFixture({ hasCityTax: true });
+    const services = [serviceEntry("HUESLE-HUND", [["2026-10-10", 15], ["2026-10-11", 15], ["2026-10-12", 15]], { name: "Dog fee" })];
+    const folios = [
+      { charges: [{ type: "CityTax", serviceDate: "2026-10-12", amount: { grossAmount: 4, currency: "EUR" } }] },
+    ];
+    const { calls, restore } = installExtensionFetchMock({
+      reservation,
+      availableNights: [true, false],
+      services,
+      folios,
+    });
+    try {
+      const offer = await getStayExtensionOffer(reservation);
+      assert.ok(offer);
+      assert.equal(offer.extras.length, 1);
+      assert.equal(offer.extras[0].serviceId, "HUESLE-HUND");
+      assert.deepEqual(offer.extras[0].amount, { amount: 15, currency: "EUR" });
+      assert.deepEqual(offer.cityTax, { amount: 4, currency: "EUR" });
+      assert.deepEqual(offer.totalPrice, { amount: 128 + 15 + 4, currency: "EUR" });
+      assert.ok(!calls.some((c) => c.method !== "GET"), "a preview must never mutate anything");
+    } finally {
+      restore();
+    }
+  });
+});
+
+test("getStayExtensionOffer: a reservation not subject to city tax never shows a city tax estimate", async () => {
+  await withCleanLocalDb(async () => {
+    await saveExtensionConfig("TESTPROP", {
+      extensionNightEnabled: true,
+      extensionDiscountOneNightGap: 20,
+      extensionDiscountStandard: 15,
+      minSellableStayNights: 2,
+    });
+    const reservation = reservationFixture({ hasCityTax: false });
+    const { calls, restore } = installExtensionFetchMock({ reservation, availableNights: [true, false] });
+    try {
+      const offer = await getStayExtensionOffer(reservation);
+      assert.equal(offer.cityTax, null);
+      assert.deepEqual(offer.totalPrice, offer.extensionPrice);
+      assert.ok(!calls.some((c) => c.pathname === "/finance/v1/folios"), "never reads folios when not subject to city tax");
+    } finally {
+      restore();
+    }
+  });
+});
+
+test("confirmStayExtension: extends a per-night service covering every original night to the new night at its normal price", async () => {
+  await withCleanLocalDb(async () => {
+    await saveExtensionConfig("TESTPROP", {
+      extensionNightEnabled: true,
+      extensionDiscountOneNightGap: 20,
+      extensionDiscountStandard: 15,
+      minSellableStayNights: 2,
+    });
+    const reservation = reservationFixture();
+    const services = [serviceEntry("HUESLE-HUND", [["2026-10-10", 15], ["2026-10-11", 15], ["2026-10-12", 15]], { name: "Dog fee" })];
+    const { calls, restore } = installExtensionFetchMock({ reservation, availableNights: [true, false], services });
+    try {
+      const result = await confirmStayExtension({ reservationId: reservation.id, expectedCurrentDeparture: "2026-10-13" });
+      assert.equal(result.newDeparture, "2026-10-14");
+
+      const bookServiceCall = calls.find((c) => c.pathname.endsWith("/book-service"));
+      assert.ok(bookServiceCall, "must call book-service to extend the eligible extra");
+      assert.equal(bookServiceCall.body.serviceId, "HUESLE-HUND");
+      assert.deepEqual(
+        bookServiceCall.body.dates.map((d) => d.serviceDate),
+        ["2026-10-10", "2026-10-11", "2026-10-12", "2026-10-13"],
+        "resends every existing date plus exactly the old-departure date as the new night"
+      );
+      assert.deepEqual(
+        bookServiceCall.body.dates.slice(0, 3).map((d) => d.amount.amount),
+        [15, 15, 15],
+        "existing dates keep their own already-charged amount, completely unchanged"
+      );
+      assert.equal(bookServiceCall.body.dates[3].amount.amount, 15, "new date uses the normal (undiscounted) price");
+
+      const records = await listExtensionRecords();
+      assert.equal(records.length, 1);
+      assert.equal(records[0].extras.length, 1);
+      assert.equal(records[0].extras[0].extended, true);
+      assert.equal(records[0].status, "confirmed");
+    } finally {
+      restore();
+    }
+  });
+});
+
+test("confirmStayExtension: never touches a mandatory service or a single-date arrival/departure-tied service", async () => {
+  await withCleanLocalDb(async () => {
+    await saveExtensionConfig("TESTPROP", {
+      extensionNightEnabled: true,
+      extensionDiscountOneNightGap: 20,
+      extensionDiscountStandard: 15,
+      minSellableStayNights: 2,
+    });
+    const reservation = reservationFixture();
+    const services = [
+      serviceEntry("HUESLE-FINALCLEAN", [["2026-10-13", 119]], { mandatory: true }),
+      serviceEntry("HUESLE-ECI", [["2026-10-10", 25]]),
+    ];
+    const { calls, restore } = installExtensionFetchMock({ reservation, availableNights: [true, false], services });
+    try {
+      await confirmStayExtension({ reservationId: reservation.id, expectedCurrentDeparture: "2026-10-13" });
+      assert.ok(!calls.some((c) => c.pathname.endsWith("/book-service")), "mandatory/day-tied services must never be booked");
+
+      const records = await listExtensionRecords();
+      assert.equal(records[0].extras.length, 0);
+      assert.equal(records[0].mandatoryServicesIntact, true);
+      assert.equal(records[0].status, "confirmed");
+    } finally {
+      restore();
+    }
+  });
+});
+
+test("confirmStayExtension: a service whose dates already include the new night is treated as already extended — idempotent, never re-sent", async () => {
+  await withCleanLocalDb(async () => {
+    await saveExtensionConfig("TESTPROP", {
+      extensionNightEnabled: true,
+      extensionDiscountOneNightGap: 20,
+      extensionDiscountStandard: 15,
+      minSellableStayNights: 2,
+    });
+    const reservation = reservationFixture();
+    const services = [
+      serviceEntry("HUESLE-HUND", [["2026-10-10", 15], ["2026-10-11", 15], ["2026-10-12", 15], ["2026-10-13", 15]]),
+    ];
+    const { calls, restore } = installExtensionFetchMock({ reservation, availableNights: [true, false], services });
+    try {
+      await confirmStayExtension({ reservationId: reservation.id, expectedCurrentDeparture: "2026-10-13" });
+      assert.ok(
+        !calls.some((c) => c.pathname.endsWith("/book-service")),
+        "an already-extended service must never be re-sent (a retry must never duplicate)"
+      );
+
+      const records = await listExtensionRecords();
+      assert.equal(records[0].extras.length, 1);
+      assert.equal(records[0].extras[0].alreadyDone, true);
+      assert.equal(records[0].status, "confirmed");
+    } finally {
+      restore();
+    }
+  });
+});
+
+test("confirmStayExtension: a failed per-night-service extension never rolls back the accommodation extension, and is recorded for staff follow-up", async () => {
+  await withCleanLocalDb(async () => {
+    await saveExtensionConfig("TESTPROP", {
+      extensionNightEnabled: true,
+      extensionDiscountOneNightGap: 20,
+      extensionDiscountStandard: 15,
+      minSellableStayNights: 2,
+    });
+    const reservation = reservationFixture();
+    const services = [serviceEntry("HUESLE-HUND", [["2026-10-10", 15], ["2026-10-11", 15], ["2026-10-12", 15]])];
+    const { calls, restore } = installExtensionFetchMock({
+      reservation,
+      availableNights: [true, false],
+      services,
+      bookServiceHandler: () => new Response(JSON.stringify({ message: "boom" }), { status: 500 }),
+    });
+    try {
+      const result = await confirmStayExtension({ reservationId: reservation.id, expectedCurrentDeparture: "2026-10-13" });
+      assert.equal(result.newDeparture, "2026-10-14", "accommodation extension still succeeds");
+      assert.equal(calls.filter((c) => c.pathname.endsWith("/amend")).length, 1);
+
+      const records = await listExtensionRecords();
+      assert.equal(records[0].extras[0].extended, false);
+      assert.equal(records[0].status, "confirmed_with_issues");
+    } finally {
+      restore();
+    }
+  });
+});
+
+test("confirmStayExtension: city tax charge missing for the new night after amend -> recorded as a verification failure, never invented", async () => {
+  await withCleanLocalDb(async () => {
+    await saveExtensionConfig("TESTPROP", {
+      extensionNightEnabled: true,
+      extensionDiscountOneNightGap: 20,
+      extensionDiscountStandard: 15,
+      minSellableStayNights: 2,
+    });
+    const reservation = reservationFixture({ hasCityTax: true });
+    const { restore } = installExtensionFetchMock({ reservation, availableNights: [true, false], folios: [] });
+    try {
+      const result = await confirmStayExtension({ reservationId: reservation.id, expectedCurrentDeparture: "2026-10-13" });
+      assert.equal(result.newDeparture, "2026-10-14");
+
+      const records = await listExtensionRecords();
+      assert.equal(records[0].cityTax.applicable, true);
+      assert.equal(records[0].cityTax.verified, false);
+      assert.equal(records[0].status, "confirmed_with_issues");
+    } finally {
+      restore();
+    }
+  });
+});
+
+test("confirmStayExtension: city tax charge found for the new night -> verified true, status stays confirmed", async () => {
+  await withCleanLocalDb(async () => {
+    await saveExtensionConfig("TESTPROP", {
+      extensionNightEnabled: true,
+      extensionDiscountOneNightGap: 20,
+      extensionDiscountStandard: 15,
+      minSellableStayNights: 2,
+    });
+    const reservation = reservationFixture({ hasCityTax: true });
+    const folios = [
+      { charges: [{ type: "CityTax", serviceDate: "2026-10-13", amount: { grossAmount: 4, currency: "EUR" } }] },
+    ];
+    const { restore } = installExtensionFetchMock({ reservation, availableNights: [true, false], folios });
+    try {
+      await confirmStayExtension({ reservationId: reservation.id, expectedCurrentDeparture: "2026-10-13" });
+      const records = await listExtensionRecords();
+      assert.equal(records[0].cityTax.verified, true);
+      assert.deepEqual(records[0].cityTax.amount, { amount: 4, currency: "EUR" });
+      assert.equal(records[0].status, "confirmed");
     } finally {
       restore();
     }
