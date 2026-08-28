@@ -27,6 +27,137 @@ const ACTION_TYPE_OPTIONS = [
   { value: "increase_occupancy", label: "Personenanzahl erhöhen" },
 ];
 
+// "Stay one more night" upsell — never a fake Apaleo service, so it has no
+// row in the extras list above; a small property-level config instead (see
+// lib/store.js's getExtensionConfig/saveExtensionConfig), so the discount
+// rules can be tuned without a code change.
+const DEFAULT_EXTENSION_CONFIG = {
+  extensionNightEnabled: false,
+  extensionDiscountOneNightGap: 20,
+  extensionDiscountStandard: 15,
+  minSellableStayNights: 2,
+};
+
+function ExtensionConfigPanel({ propertyId }) {
+  const [config, setConfig] = useState(DEFAULT_EXTENSION_CONFIG);
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (!propertyId) return;
+    setLoading(true);
+    setError("");
+    fetch(`/api/admin/extension-config?propertyId=${encodeURIComponent(propertyId)}`)
+      .then((r) => r.json())
+      .then((data) => setConfig({ ...DEFAULT_EXTENSION_CONFIG, ...(data.config || {}) }))
+      .catch(() => setError("Verlängerungsnacht-Einstellungen konnten nicht geladen werden."))
+      .finally(() => setLoading(false));
+  }, [propertyId]);
+
+  function update(patch) {
+    setConfig((prev) => ({ ...prev, ...patch }));
+  }
+
+  async function save() {
+    setSaving(true);
+    setError("");
+    try {
+      const res = await fetch("/api/admin/extension-config", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ propertyId, config }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Speichern fehlgeschlagen.");
+      setConfig(data.config);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 1500);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+      <p className="font-semibold text-slate-800">„Eine Nacht länger bleiben“</p>
+      <p className="mt-0.5 text-xs text-slate-400">
+        Nie ein Apaleo-Service — verlängert die Reservierung direkt um eine Nacht (Apaleo AmendReservation). Ein
+        Angebot wird nur gezeigt, wenn dadurch keine unverkäufliche Restlücke entsteht: 1 freie Nacht schließt die
+        Lücke vollständig (Rabatt A), mehr als „Mindestbelegung“ freie Nächte lassen noch genug verkäufliche
+        Restnächte übrig (Rabatt B) — dazwischen wird nichts angeboten.
+      </p>
+
+      {error && <p className="mt-2 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700">{error}</p>}
+      {loading && <p className="mt-2 text-xs text-slate-500">Wird geladen…</p>}
+
+      <label className="mt-3 flex items-center gap-2 text-sm font-medium text-slate-700">
+        <input
+          type="checkbox"
+          checked={Boolean(config.extensionNightEnabled)}
+          onChange={(e) => update({ extensionNightEnabled: e.target.checked })}
+        />
+        Im Gäste-Portal anbieten
+      </label>
+
+      <div className="mt-3 grid gap-4 sm:grid-cols-3">
+        <div>
+          <label className="block text-xs font-medium text-slate-500">Rabatt bei 1 freier Nacht (%)</label>
+          <input
+            type="number"
+            min="0"
+            max="100"
+            value={config.extensionDiscountOneNightGap}
+            onChange={(e) => update({ extensionDiscountOneNightGap: e.target.value })}
+            className="mt-1 w-full rounded-md border border-slate-300 px-3 py-1.5 text-sm"
+          />
+          <p className="mt-0.5 text-xs text-slate-400">Schließt die Lücke vollständig.</p>
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-slate-500">Rabatt bei größerer Lücke (%)</label>
+          <input
+            type="number"
+            min="0"
+            max="100"
+            value={config.extensionDiscountStandard}
+            onChange={(e) => update({ extensionDiscountStandard: e.target.value })}
+            className="mt-1 w-full rounded-md border border-slate-300 px-3 py-1.5 text-sm"
+          />
+          <p className="mt-0.5 text-xs text-slate-400">Wenn nach der Verlängerung noch genug Restnächte frei sind.</p>
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-slate-500">Mindestbelegung (Nächte)</label>
+          <input
+            type="number"
+            min="1"
+            value={config.minSellableStayNights}
+            onChange={(e) => update({ minSellableStayNights: e.target.value })}
+            className="mt-1 w-full rounded-md border border-slate-300 px-3 py-1.5 text-sm"
+          />
+          <p className="mt-0.5 text-xs text-slate-400">
+            Kürzeste normal verkaufte Aufenthaltsdauer. Bleiben nach der Verlängerung weniger Restnächte übrig, wird
+            kein Angebot gezeigt.
+          </p>
+        </div>
+      </div>
+
+      <div className="mt-4 flex items-center gap-3">
+        <button
+          onClick={save}
+          disabled={saving}
+          className="rounded-md bg-brand-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-60"
+        >
+          {saving ? "Speichert…" : "Speichern"}
+        </button>
+        {saved && <span className="text-sm text-green-700">Gespeichert.</span>}
+      </div>
+    </div>
+  );
+}
+
 function emptyRow(service) {
   return {
     serviceId: service.id,
@@ -165,6 +296,8 @@ export default function CatalogManager() {
 
       {error && <p className="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>}
       {loading && <p className="text-sm text-slate-500">Wird geladen…</p>}
+
+      {propertyId && <ExtensionConfigPanel propertyId={propertyId} />}
 
       <div className="space-y-4">
         {rows.map((row) => (

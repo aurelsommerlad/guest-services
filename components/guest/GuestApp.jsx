@@ -502,6 +502,98 @@ function RequestCatalogItem({ item, language, reservationId, lastName, guestName
   );
 }
 
+// "Stay one more night" upsell — never an Apaleo service and never part of
+// the regular extras cart (see lib/stayExtension.js / lib/guest.js): its
+// own distinct card with a single confirm action, entirely self-contained
+// (same pattern as RequestCatalogItem above), so it can be shown or
+// omitted independently of the rest of the catalog's state (empty, past
+// stay, etc.).
+function StayExtensionCard({ language, offer, reservationId, lastName, onExtended }) {
+  // idle -> submitting -> success, or -> error (back to idle)
+  const [status, setStatus] = useState("idle");
+  const [error, setError] = useState("");
+
+  async function handleConfirm() {
+    setStatus("submitting");
+    setError("");
+    try {
+      const data = await postJSON("/api/guest/stay-extension", {
+        reservationId,
+        lastName,
+        currentDeparture: offer.currentDeparture,
+        language,
+      });
+      setStatus("success");
+      onExtended(data.newDeparture);
+    } catch (err) {
+      setError(err.message);
+      setStatus("error");
+    }
+  }
+
+  if (status === "success") {
+    return (
+      <div className="rounded-lg border border-stone-200 bg-white p-4 sm:p-6">
+        <h3 className={`${HEADING_CLASS} break-words text-base text-stone-900 sm:text-lg`}>
+          {t(language, "stayExtensionTitle")}
+        </h3>
+        <p className="mt-2 break-words text-sm text-stone-600">{t(language, "stayExtensionSuccessMessage")}</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-lg border border-stone-200 bg-white p-4 sm:p-6">
+      <h3 className={`${HEADING_CLASS} break-words text-base text-stone-900 sm:text-lg`}>
+        {t(language, "stayExtensionTitle")}
+      </h3>
+      <p className="mt-1 break-words text-sm text-stone-500">{t(language, "stayExtensionSubtitle")}</p>
+
+      <div className="mt-4 flex flex-wrap items-end justify-between gap-4">
+        <div className="min-w-0 space-y-3">
+          <div>
+            <p className="break-words text-xs uppercase tracking-wide text-stone-400">
+              {t(language, "stayExtensionNewDepartureLabel")}
+            </p>
+            <p className="break-words text-sm font-medium text-stone-900">{formatDate(offer.newDeparture, language)}</p>
+          </div>
+          <div>
+            <p className="break-words text-xs uppercase tracking-wide text-stone-400">
+              {t(language, "stayExtensionAverageRateLabel")}
+            </p>
+            <p className="break-words text-sm font-medium text-stone-900">
+              {formatPrice(offer.averageNightlyRate, language)}
+            </p>
+          </div>
+        </div>
+        <div className="min-w-0 text-right">
+          <p className="break-words text-xs uppercase tracking-wide text-stone-400">
+            {t(language, "stayExtensionPriceLabel")}
+          </p>
+          <p className="break-words text-2xl font-semibold text-stone-900">
+            {formatPrice(offer.extensionPrice, language)}
+          </p>
+          <p className="mt-0.5 break-words text-xs font-medium text-stone-600">
+            {offer.discountPercent}
+            {t(language, "stayExtensionDiscountSuffix")}
+          </p>
+        </div>
+      </div>
+
+      {error && <p className="mt-3 break-words text-sm text-red-600">{error}</p>}
+
+      <button
+        type="button"
+        onClick={handleConfirm}
+        disabled={status === "submitting"}
+        className={`${PRIMARY_BUTTON} mt-4`}
+      >
+        {status === "submitting" ? t(language, "stayExtensionButtonLoading") : t(language, "stayExtensionButton")}
+      </button>
+    </div>
+  );
+}
+
 function CatalogView({
   items,
   language,
@@ -631,6 +723,10 @@ export default function GuestApp() {
   const [reservation, setReservation] = useState(null);
   const [catalogItems, setCatalogItems] = useState([]);
   const [catalogMessage, setCatalogMessage] = useState("");
+  // "Stay one more night" upsell — null whenever no valid offer exists (see
+  // lib/guest.js's getStayExtensionOffer); shown independently of
+  // catalogItems/catalogMessage, since it's never an Apaleo service.
+  const [extensionOffer, setExtensionOffer] = useState(null);
   const [cart, setCart] = useState({});
   // { [serviceId]: string[] } — only populated for requiresVehicleRegistration
   // items (e.g. parking); see lib/vehicleRegistration.js.
@@ -697,6 +793,7 @@ export default function GuestApp() {
         setCatalogMessage("");
         setCatalogItems(data.items);
       }
+      setExtensionOffer(data.extensionOffer || null);
       setReservation(res);
       setGuestName(name);
       setStep("catalog");
@@ -790,10 +887,23 @@ export default function GuestApp() {
     setReservation(null);
     setCatalogItems([]);
     setCatalogMessage("");
+    setExtensionOffer(null);
     setCart({});
     setVehiclePlates({});
     setOrderResult(null);
     setError("");
+  }
+
+  // Reflects the new departure immediately (the reservation summary at the
+  // top of the page). Deliberately does NOT clear extensionOffer: the card
+  // stays mounted so its own "success" state (see StayExtensionCard) can
+  // render in place of the form/button — clearing it here would unmount
+  // the card before the guest ever saw a confirmation. A second night
+  // would need its own fresh offer computed from the new state (this
+  // session doesn't reload automatically), but the card's own status
+  // already makes re-submission impossible without that reload.
+  function handleStayExtended(newDeparture) {
+    setReservation((prev) => (prev ? { ...prev, departure: newDeparture } : prev));
   }
 
   const isWideStep = step === "catalog";
@@ -832,6 +942,17 @@ export default function GuestApp() {
         {step === "catalog" && (
           <>
             {error && <p className={`mb-4 ${ERROR_BANNER}`}>{error}</p>}
+            {extensionOffer && (
+              <div className="mb-4">
+                <StayExtensionCard
+                  language={language}
+                  offer={extensionOffer}
+                  reservationId={reservation?.id}
+                  lastName={lastName}
+                  onExtended={handleStayExtended}
+                />
+              </div>
+            )}
             {catalogMessage ? (
               <p className={NOTICE_BANNER}>{catalogMessage}</p>
             ) : (
