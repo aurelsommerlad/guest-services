@@ -584,14 +584,13 @@ function StayExtensionCard({ language, offer, reservationId, lastName, onExtende
             <span className="whitespace-nowrap text-xs text-stone-400 line-through">
               {formatPrice(offer.averageNightlyRate, language)}
             </span>
-            <span className="whitespace-nowrap rounded bg-emerald-100 px-1.5 py-0.5 text-xs font-medium text-emerald-700">
+            <span className="whitespace-nowrap rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700">
               {offer.discountPercent}
-              {t(language, "stayExtensionDiscountSuffix")}
+              {t(language, "stayExtensionDiscountSuffix")} · {t(language, "stayExtensionSavingsPrefix")}
+              {formatPrice(accommodationSaving, language)}
+              {t(language, "stayExtensionSavingsSuffix")}
             </span>
           </div>
-          <p className="mt-0.5 whitespace-nowrap text-xs font-medium text-stone-600">
-            {t(language, "stayExtensionSavingsLabel")} {formatPrice(accommodationSaving, language)}
-          </p>
         </div>
 
         {extras.map((extra) => (
