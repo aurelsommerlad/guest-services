@@ -20,6 +20,13 @@ const PRIMARY_BUTTON =
   "inline-flex w-full items-center justify-center rounded-md bg-stone-900 px-6 py-3.5 text-sm font-semibold uppercase tracking-wide text-white transition hover:bg-black disabled:cursor-not-allowed disabled:opacity-50";
 const SECONDARY_BUTTON =
   "inline-flex items-center justify-center rounded-md border border-stone-300 bg-white px-5 py-2.5 text-sm font-medium uppercase tracking-wide text-stone-700 transition hover:border-stone-400 hover:bg-stone-50";
+// A filled, very light warm-neutral button — same shape/size/typography as
+// PRIMARY_BUTTON, just recolored so it reads as visually subordinate to a
+// real black primary action. Used ONLY by the pre-arrival stay-extension
+// card (both its initial and its expanded-confirmation button) — never an
+// outlined/white button, never black.
+const LIGHT_BUTTON =
+  "inline-flex w-full items-center justify-center rounded-md bg-stone-100 px-6 py-3.5 text-sm font-semibold uppercase tracking-wide text-stone-900 transition hover:bg-stone-200 disabled:cursor-not-allowed disabled:opacity-50";
 // text-base (16px) is intentional, not the original 15px: iOS Safari
 // auto-zooms the page on focus for any form control whose computed
 // font-size is below 16px. Below that threshold this exact input (the
@@ -614,25 +621,39 @@ function StayExtensionBreakdown({ language, offer }) {
   );
 }
 
-// The full details block: title, subtitle, new departure, the complete
-// price breakdown, and the actual confirm action. Shared by the in-house
-// card (always shown) and the compact card's expanded state (shown only
-// after the guest chooses to see it) — the confirm button here is the one
-// and only place that actually extends the stay.
-function StayExtensionFullDetails({ language, offer, status, error, onConfirm }) {
+// The full details block: title, subtitle, (optionally) new departure, the
+// complete price breakdown, and the actual confirm action. Shared by the
+// in-house card (always shown, with every default below) and the compact
+// card's expanded confirmation (shown only after the guest chooses to see
+// it, with the new-departure block hidden and a lighter/differently
+// labeled button) — the confirm button here is the one and only place that
+// actually extends the stay.
+function StayExtensionFullDetails({
+  language,
+  offer,
+  status,
+  error,
+  onConfirm,
+  showNewDeparture = true,
+  buttonClassName = PRIMARY_BUTTON,
+  buttonLabelKey = "stayExtensionButton",
+  subtitleKey = "stayExtensionSubtitle",
+}) {
   return (
     <>
       <h3 className={`${HEADING_CLASS} break-words text-base text-stone-900 sm:text-lg`}>
         {t(language, "stayExtensionTitle")}
       </h3>
-      <p className="mt-1 break-words text-sm text-stone-500">{t(language, "stayExtensionSubtitle")}</p>
+      <p className="mt-1 break-words text-sm text-stone-500">{t(language, subtitleKey)}</p>
 
-      <div className="mt-4">
-        <p className="break-words text-xs uppercase tracking-wide text-stone-400">
-          {t(language, "stayExtensionNewDepartureLabel")}
-        </p>
-        <p className="break-words text-sm font-medium text-stone-900">{formatDate(offer.newDeparture, language)}</p>
-      </div>
+      {showNewDeparture && (
+        <div className="mt-4">
+          <p className="break-words text-xs uppercase tracking-wide text-stone-400">
+            {t(language, "stayExtensionNewDepartureLabel")}
+          </p>
+          <p className="break-words text-sm font-medium text-stone-900">{formatDate(offer.newDeparture, language)}</p>
+        </div>
+      )}
 
       <StayExtensionBreakdown language={language} offer={offer} />
 
@@ -642,9 +663,9 @@ function StayExtensionFullDetails({ language, offer, status, error, onConfirm })
         type="button"
         onClick={onConfirm}
         disabled={status === "submitting"}
-        className={`${PRIMARY_BUTTON} mt-4`}
+        className={`${buttonClassName} mt-4`}
       >
-        {status === "submitting" ? t(language, "stayExtensionButtonLoading") : t(language, "stayExtensionButton")}
+        {status === "submitting" ? t(language, "stayExtensionButtonLoading") : t(language, buttonLabelKey)}
       </button>
     </>
   );
@@ -668,13 +689,16 @@ function StayExtensionCard({ language, offer, reservationId, lastName, onExtende
   );
 }
 
-// The BEFORE-ARRIVAL variant — deliberately small and discreet (see the
-// business rule this implements) so the offer never visually dominates
-// the normal extras catalog before the stay has started. Never shows
-// extras/city tax/total up front: clicking the button here only expands
-// to reveal the exact same StayExtensionFullDetails used by the in-house
-// card above — the guest always sees the complete total before the second,
-// actual confirm click.
+// The BEFORE-ARRIVAL variant — the SAME outer card style, border, radius,
+// typography, warm inner price box, and green discount badge as the
+// in-house card (see StayExtensionCard/StayExtensionFullDetails above);
+// only less vertical padding, a shorter price box (no extras/city
+// tax/savings/total, no new-departure block), and a light (never black)
+// button make it read as compact/subordinate rather than the main action.
+// Clicking the button never books anything by itself — it only expands to
+// the exact same StayExtensionBreakdown/total used by the in-house card
+// (via StayExtensionFullDetails, new-departure hidden, light final button),
+// so the guest always sees the complete total before the actual confirm.
 function StayExtensionCompactCard({ language, offer, reservationId, lastName, onExtended }) {
   const [expanded, setExpanded] = useState(false);
   const { status, error, handleConfirm } = useStayExtensionConfirm({ reservationId, lastName, offer, language, onExtended });
@@ -685,38 +709,48 @@ function StayExtensionCompactCard({ language, offer, reservationId, lastName, on
 
   if (expanded) {
     return (
-      <div className="rounded-lg border border-stone-200 bg-white p-4 sm:p-6">
-        <StayExtensionFullDetails language={language} offer={offer} status={status} error={error} onConfirm={handleConfirm} />
+      <div className="rounded-lg border border-stone-200 bg-white p-3 sm:p-4">
+        <StayExtensionFullDetails
+          language={language}
+          offer={offer}
+          status={status}
+          error={error}
+          onConfirm={handleConfirm}
+          showNewDeparture={false}
+          buttonClassName={LIGHT_BUTTON}
+          buttonLabelKey="stayExtensionFinalButton"
+          subtitleKey="stayExtensionCompactSubtitle"
+        />
       </div>
     );
   }
 
   return (
     <div className="rounded-lg border border-stone-200 bg-white p-3 sm:p-4">
-      <h3 className={`${HEADING_CLASS} break-words text-sm text-stone-900`}>{t(language, "stayExtensionTitle")}</h3>
-      <p className="mt-1 break-words text-xs text-stone-500">{t(language, "stayExtensionCompactSubtitle")}</p>
+      <h3 className={`${HEADING_CLASS} break-words text-base text-stone-900 sm:text-lg`}>
+        {t(language, "stayExtensionTitle")}
+      </h3>
+      <p className="mt-1 break-words text-sm text-stone-500">{t(language, "stayExtensionCompactSubtitle")}</p>
 
-      <div className="mt-2">
-        <p className="break-words text-xs uppercase tracking-wide text-stone-400">
-          {t(language, "stayExtensionNewDepartureLabel")}
-        </p>
-        <p className="break-words text-xs font-medium text-stone-900">{formatDate(offer.newDeparture, language)}</p>
+      <div className="mt-4 space-y-1 rounded-md bg-stone-50 p-3 text-sm sm:p-4">
+        <div className="flex items-baseline justify-between gap-2">
+          <span className="break-words text-stone-700">{t(language, "stayExtensionAccommodationLabel")}</span>
+          <span className="whitespace-nowrap text-base font-semibold text-stone-900">
+            {formatPrice(offer.extensionPrice, language)}
+          </span>
+        </div>
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+          <span className="whitespace-nowrap text-xs text-stone-400 line-through">
+            {formatPrice(offer.averageNightlyRate, language)}
+          </span>
+          <span className="whitespace-nowrap rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-700">
+            {offer.discountPercent}
+            {t(language, "stayExtensionDiscountSuffix")}
+          </span>
+        </div>
       </div>
 
-      <div className="mt-2 flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-        <span className="whitespace-nowrap text-xs text-stone-400 line-through">
-          {formatPrice(offer.averageNightlyRate, language)}
-        </span>
-        <span className="whitespace-nowrap text-sm font-semibold text-stone-900">
-          {formatPrice(offer.extensionPrice, language)}
-        </span>
-      </div>
-      <span className="mt-1 inline-block whitespace-nowrap rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-700">
-        {offer.discountPercent}
-        {t(language, "stayExtensionDiscountSuffix")}
-      </span>
-
-      <button type="button" onClick={() => setExpanded(true)} className={`${SECONDARY_BUTTON} mt-3`}>
+      <button type="button" onClick={() => setExpanded(true)} className={`${LIGHT_BUTTON} mt-4`}>
         {t(language, "stayExtensionButton")}
       </button>
     </div>

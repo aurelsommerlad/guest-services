@@ -53,6 +53,17 @@ test("t() returns the correct translation per language for representative guest-
       "Bitte gib das Kennzeichen des Fahrzeugs an.",
       "Please enter the vehicle's license plate.",
     ],
+    // Stay-extension: the compact pre-arrival card's initial button reuses
+    // stayExtensionButton (unchanged); its expanded confirmation uses this
+    // distinct, differently-styled final button (see
+    // components/guest/GuestApp.jsx's StayExtensionCompactCard) — the
+    // in-house card never uses this key.
+    ["stayExtensionFinalButton", "JETZT VERLÄNGERN", "EXTEND NOW"],
+    [
+      "stayExtensionCompactSubtitle",
+      "Noch eine Nacht dranhängen? Sichere Dir Deine Verlängerungsnacht schon jetzt günstiger.",
+      "Want to stay another night? Secure your extension night now for less.",
+    ],
   ];
   for (const [key, de, en] of pairs) {
     assert.equal(t("de", key), de, `de.${key}`);
