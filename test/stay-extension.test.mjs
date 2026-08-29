@@ -400,7 +400,7 @@ test("buildExtensionPricePreview: with no extras and no city tax, the total equa
   assert.deepEqual(total, { amount: 93.5, currency: "EUR" });
 });
 
-test("determineStayExtensionPhase: status 'InHouse' -> in_house (the full, prominent card), regardless of dates", () => {
+test("determineStayExtensionPhase: status 'InHouse' -> in_house (immediate-CTA compact card), regardless of dates", () => {
   assert.equal(determineStayExtensionPhase({ status: "InHouse" }), "in_house");
   assert.equal(
     determineStayExtensionPhase({
@@ -443,7 +443,7 @@ test("determineStayExtensionPhase: departure is today -> no longer in_house (dep
   assert.equal(phase, "before_arrival");
 });
 
-test("determineStayExtensionPhase: before arrival, any other status, or missing dates -> before_arrival (the compact card)", () => {
+test("determineStayExtensionPhase: before arrival, any other status, or missing dates -> before_arrival (ANFRAGEN-style compact card)", () => {
   assert.equal(
     determineStayExtensionPhase({
       status: "Confirmed",
@@ -1033,7 +1033,7 @@ test("getStayExtensionOffer: includes eligible extras and a city tax estimate in
   });
 });
 
-test("getStayExtensionOffer: an InHouse reservation's offer is tagged phase 'in_house' (full, prominent card)", async () => {
+test("getStayExtensionOffer: an InHouse reservation's offer is tagged phase 'in_house' (immediate-CTA compact card)", async () => {
   await withCleanLocalDb(async () => {
     await saveExtensionConfig("TESTPROP", {
       extensionNightEnabled: true,
@@ -1053,7 +1053,7 @@ test("getStayExtensionOffer: an InHouse reservation's offer is tagged phase 'in_
   });
 });
 
-test("getStayExtensionOffer: a Confirmed (not yet checked in) reservation's offer is tagged phase 'before_arrival' (compact card)", async () => {
+test("getStayExtensionOffer: a Confirmed (not yet checked in) reservation's offer is tagged phase 'before_arrival' (ANFRAGEN-style compact card)", async () => {
   await withCleanLocalDb(async () => {
     await saveExtensionConfig("TESTPROP", {
       extensionNightEnabled: true,

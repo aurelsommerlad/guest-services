@@ -545,11 +545,11 @@ function StayExtensionSuccessNotice({ language }) {
   );
 }
 
-// The price breakdown — reused verbatim by both the full (in-house) card
-// and the compact (pre-arrival) card's expanded confirmation area, so a
-// guest on either variant sees the exact same figures computed the exact
-// same way (lib/stayExtension.js's buildExtensionOffer/
-// buildExtensionPricePreview) before ever being able to confirm anything.
+// The price breakdown — shown in the compact card's expanded confirmation
+// area for either reservation phase, so a guest always sees the exact same
+// figures computed the exact same way (lib/stayExtension.js's
+// buildExtensionOffer/buildExtensionPricePreview) before ever being able to
+// confirm anything.
 function StayExtensionBreakdown({ language, offer }) {
   const extras = offer.extras || [];
   const cityTax = offer.cityTax || null;
@@ -615,12 +615,11 @@ function StayExtensionBreakdown({ language, offer }) {
 }
 
 // The full details block: title, subtitle, (optionally) new departure, the
-// complete price breakdown, and the actual confirm action. Shared by the
-// in-house card (always shown, with every default below) and the compact
-// card's expanded confirmation (shown only after the guest chooses to see
-// it, with the new-departure block hidden and a lighter/differently
-// labeled button) — the confirm button here is the one and only place that
-// actually extends the stay.
+// complete price breakdown, and the actual confirm action. Rendered inside
+// the compact card's expanded confirmation, for either reservation phase
+// (shown only after the guest chooses to see it, new-departure block
+// hidden, black final button) — the confirm button here is the one and
+// only place that actually extends the stay.
 function StayExtensionFullDetails({
   language,
   offer,
@@ -664,39 +663,22 @@ function StayExtensionFullDetails({
   );
 }
 
-// The IN-HOUSE variant — unchanged in appearance from before: large,
-// prominent, full price breakdown always visible. Shown once the guest's
-// stay has actually started (offer.phase === "in_house", see
-// lib/stayExtension.js's determineStayExtensionPhase).
-function StayExtensionCard({ language, offer, reservationId, lastName, onExtended }) {
-  const { status, error, handleConfirm } = useStayExtensionConfirm({ reservationId, lastName, offer, language, onExtended });
-
-  if (status === "success") {
-    return <StayExtensionSuccessNotice language={language} />;
-  }
-
-  return (
-    <div className="rounded-lg border border-stone-200 bg-white p-4 sm:p-6">
-      <StayExtensionFullDetails language={language} offer={offer} status={status} error={error} onConfirm={handleConfirm} />
-    </div>
-  );
-}
-
-// The BEFORE-ARRIVAL variant — the SAME outer card style, border, radius,
-// typography, warm inner price box, and green discount badge as the
-// in-house card (see StayExtensionCard/StayExtensionFullDetails above);
-// only less vertical padding, a shorter price box (no extras/city
-// tax/savings/total, no new-departure block), and its initial CTA using
-// the SAME outlined/white style as the guest portal's existing ANFRAGEN
-// button (never filled/black) make it read as compact/subordinate rather
-// than the main action. Clicking that button never books anything by
-// itself — it only expands to the exact same StayExtensionBreakdown/total
-// used by the in-house card (via StayExtensionFullDetails, new-departure
-// hidden), now with the standard black confirm button, so the guest
-// always sees the complete total before the actual confirm click.
+// The ONE stay-extension card — same compact layout, same price box, same
+// two-step expand-then-confirm flow for BOTH reservation phases (see
+// offer.phase / lib/stayExtension.js's determineStayExtensionPhase). Only
+// the subtitle and the collapsed CTA's styling differ by phase: PRE-ARRIVAL
+// uses the softer, planning-oriented subtitle and the outlined/white
+// ANFRAGEN-style CTA; IN-HOUSE uses the more immediate subtitle and the
+// black primary CTA. Clicking the collapsed CTA never books anything by
+// itself in either phase — it only expands to the exact same
+// StayExtensionBreakdown/total (via StayExtensionFullDetails, new-departure
+// hidden, black final button), so the guest always sees the complete total
+// before the actual confirm click.
 function StayExtensionCompactCard({ language, offer, reservationId, lastName, onExtended }) {
   const [expanded, setExpanded] = useState(false);
   const { status, error, handleConfirm } = useStayExtensionConfirm({ reservationId, lastName, offer, language, onExtended });
+  const isInHouse = offer.phase === "in_house";
+  const subtitleKey = isInHouse ? "stayExtensionSubtitle" : "stayExtensionCompactSubtitle";
 
   if (status === "success") {
     return <StayExtensionSuccessNotice language={language} />;
@@ -713,7 +695,7 @@ function StayExtensionCompactCard({ language, offer, reservationId, lastName, on
           onConfirm={handleConfirm}
           showNewDeparture={false}
           buttonLabelKey="stayExtensionFinalButton"
-          subtitleKey="stayExtensionCompactSubtitle"
+          subtitleKey={subtitleKey}
         />
       </div>
     );
@@ -724,7 +706,7 @@ function StayExtensionCompactCard({ language, offer, reservationId, lastName, on
       <h3 className={`${HEADING_CLASS} break-words text-base text-stone-900 sm:text-lg`}>
         {t(language, "stayExtensionTitle")}
       </h3>
-      <p className="mt-1 break-words text-sm text-stone-500">{t(language, "stayExtensionCompactSubtitle")}</p>
+      <p className="mt-1 break-words text-sm text-stone-500">{t(language, subtitleKey)}</p>
 
       <div className="mt-4 space-y-1 rounded-md bg-stone-50 p-3 text-sm sm:p-4">
         <div className="flex items-baseline justify-between gap-2">
@@ -744,20 +726,31 @@ function StayExtensionCompactCard({ language, offer, reservationId, lastName, on
         </div>
       </div>
 
-      <button type="button" onClick={() => setExpanded(true)} className={`${SECONDARY_BUTTON} mt-4 w-full`}>
+      <button
+        type="button"
+        onClick={() => setExpanded(true)}
+        className={`${isInHouse ? PRIMARY_BUTTON : SECONDARY_BUTTON} mt-4 w-full`}
+      >
         {t(language, "stayExtensionButton")}
       </button>
     </div>
   );
 }
 
-// Picks the presentation variant for an already-computed offer — never
-// re-derives eligibility/pricing, only reads offer.phase (see
-// lib/stayExtension.js's determineStayExtensionPhase).
+// Thin entry point kept so call sites don't need to know about the card's
+// internal expand/collapse state — always renders the single compact card
+// (see StayExtensionCompactCard above); never re-derives eligibility/pricing,
+// only reads offer.phase (see lib/stayExtension.js's
+// determineStayExtensionPhase).
 function StayExtensionOffer({ language, offer, reservationId, lastName, onExtended }) {
-  const Variant = offer.phase === "in_house" ? StayExtensionCard : StayExtensionCompactCard;
   return (
-    <Variant language={language} offer={offer} reservationId={reservationId} lastName={lastName} onExtended={onExtended} />
+    <StayExtensionCompactCard
+      language={language}
+      offer={offer}
+      reservationId={reservationId}
+      lastName={lastName}
+      onExtended={onExtended}
+    />
   );
 }
 
@@ -1063,7 +1056,7 @@ export default function GuestApp() {
 
   // Reflects the new departure immediately (the reservation summary at the
   // top of the page). Deliberately does NOT clear extensionOffer: the card
-  // stays mounted so its own "success" state (see StayExtensionCard) can
+  // stays mounted so its own "success" state (see StayExtensionCompactCard) can
   // render in place of the form/button — clearing it here would unmount
   // the card before the guest ever saw a confirmation. A second night
   // would need its own fresh offer computed from the new state (this
