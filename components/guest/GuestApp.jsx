@@ -268,19 +268,21 @@ function ReservationPicker({ language, reservations, onSelect }) {
 }
 
 // The right-aligned "amount + price unit" block shared by every extras card
-// (Parkplatz/Zusatzperson via InstantCatalogItem, Hund/etc. via
+// (Parkplatz/Zusatzperson/etc. via InstantCatalogItem, Hund/etc. via
 // RequestCatalogItem) so the price always reads the same way — bold amount,
 // unit label directly underneath — regardless of which card renders it.
-// `widthClassName` defaults to a fixed width on both mobile and desktop
-// (never "auto") so the column doesn't reflow per-card as prices/unit-label
-// lengths vary; callers needing a different mobile treatment (see
-// RequestCatalogItem's mobile-only occurrence) can override it.
+// Both card types anchor this to the card's far right on desktop (grouped
+// with their own action area — quantity controls or the request
+// button/form — never as a separate middle column); each caller passes its
+// own `widthClassName`/`visibilityClassName` since the two card types split
+// mobile vs. desktop differently (see InstantCatalogItem's two
+// breakpoint-specific occurrences vs. RequestCatalogItem's single one).
 function CatalogItemPriceBlock({
   unitPrice,
   priceUnitLabel,
   language,
   suffix,
-  widthClassName = "w-24 flex-shrink-0 sm:w-28",
+  widthClassName = "",
   visibilityClassName = "",
 }) {
   const unitLabelLine = priceUnitLabel ? (suffix ? `${priceUnitLabel} · ${suffix}` : priceUnitLabel) : suffix;
@@ -333,7 +335,18 @@ function InstantCatalogItem({ item, language, count, onChange, plates, onPlateCh
             <h3 className={`${HEADING_CLASS} min-w-0 flex-1 break-words text-base text-stone-900 sm:text-lg`}>
               {displayName}
             </h3>
-            <CatalogItemPriceBlock unitPrice={item.unitPrice} priceUnitLabel={priceUnitLabel} language={language} />
+            {/* Mobile only — unchanged from before: inline with the title.
+                On desktop the price instead anchors to the far right,
+                stacked above the quantity controls (see the trailing
+                column below), so it never reads as a detached middle
+                column between the content and the controls. */}
+            <CatalogItemPriceBlock
+              unitPrice={item.unitPrice}
+              priceUnitLabel={priceUnitLabel}
+              language={language}
+              widthClassName="w-24 flex-shrink-0"
+              visibilityClassName="sm:hidden"
+            />
           </div>
           {description && <p className="mt-1 break-words text-sm text-stone-500">{description}</p>}
           {restricted ? (
@@ -385,26 +398,40 @@ function InstantCatalogItem({ item, language, count, onChange, plates, onPlateCh
         </div>
       </div>
 
-      <div className="flex flex-shrink-0 items-center justify-end gap-3">
-        <button
-          type="button"
-          onClick={() => onChange(Math.max(0, count - 1))}
-          disabled={count === 0 || restricted}
-          className="flex h-9 w-9 items-center justify-center rounded-full border border-stone-300 text-lg font-medium text-stone-600 transition hover:border-stone-400 hover:bg-stone-50 disabled:cursor-not-allowed disabled:opacity-40"
-          aria-label={t(language, "decreaseQuantity")}
-        >
-          –
-        </button>
-        <span className="w-6 text-center text-base font-medium text-stone-900">{count}</span>
-        <button
-          type="button"
-          onClick={() => onChange(count + 1)}
-          disabled={restricted || atMaxQuantity}
-          className="flex h-9 w-9 items-center justify-center rounded-full bg-stone-900 text-lg font-medium text-white transition hover:bg-black disabled:cursor-not-allowed disabled:bg-stone-300 disabled:opacity-60"
-          aria-label={t(language, "increaseQuantity")}
-        >
-          +
-        </button>
+      {/* Desktop: price + quantity controls form one right-anchored action
+          area (price stacked above the controls) so the price reads as
+          anchored to the card's far right, not a separate middle column.
+          Mobile: unchanged — a plain row of controls (the price above is
+          shown inline with the title instead, exactly as before). */}
+      <div className="flex flex-shrink-0 items-center justify-end gap-3 sm:flex-col sm:items-end sm:justify-start sm:gap-3">
+        <CatalogItemPriceBlock
+          unitPrice={item.unitPrice}
+          priceUnitLabel={priceUnitLabel}
+          language={language}
+          widthClassName=""
+          visibilityClassName="hidden sm:block"
+        />
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => onChange(Math.max(0, count - 1))}
+            disabled={count === 0 || restricted}
+            className="flex h-9 w-9 items-center justify-center rounded-full border border-stone-300 text-lg font-medium text-stone-600 transition hover:border-stone-400 hover:bg-stone-50 disabled:cursor-not-allowed disabled:opacity-40"
+            aria-label={t(language, "decreaseQuantity")}
+          >
+            –
+          </button>
+          <span className="w-6 text-center text-base font-medium text-stone-900">{count}</span>
+          <button
+            type="button"
+            onClick={() => onChange(count + 1)}
+            disabled={restricted || atMaxQuantity}
+            className="flex h-9 w-9 items-center justify-center rounded-full bg-stone-900 text-lg font-medium text-white transition hover:bg-black disabled:cursor-not-allowed disabled:bg-stone-300 disabled:opacity-60"
+            aria-label={t(language, "increaseQuantity")}
+          >
+            +
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -456,22 +483,11 @@ function RequestCatalogItem({ item, language, reservationId, lastName, guestName
           )}
         </div>
         <div className="min-w-0 flex-1">
-          <div className="flex items-start justify-between gap-3">
-            <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
-              <h3 className={`${HEADING_CLASS} break-words text-base text-stone-900 sm:text-lg`}>{displayName}</h3>
-              <span className="rounded-full border border-stone-300 px-2 py-0.5 text-[11px] font-medium uppercase tracking-wide text-stone-500">
-                {t(language, "onRequestBadge")}
-              </span>
-            </div>
-            {item.unitPrice && (
-              <CatalogItemPriceBlock
-                unitPrice={item.unitPrice}
-                priceUnitLabel={priceUnitLabel}
-                language={language}
-                suffix={t(language, "ifConfirmed")}
-                visibilityClassName="hidden sm:block"
-              />
-            )}
+          <div className="flex flex-wrap items-center gap-2">
+            <h3 className={`${HEADING_CLASS} break-words text-base text-stone-900 sm:text-lg`}>{displayName}</h3>
+            <span className="rounded-full border border-stone-300 px-2 py-0.5 text-[11px] font-medium uppercase tracking-wide text-stone-500">
+              {t(language, "onRequestBadge")}
+            </span>
           </div>
           {description && <p className="mt-1 break-words text-sm text-stone-500">{description}</p>}
           {restricted ? (
@@ -484,6 +500,10 @@ function RequestCatalogItem({ item, language, reservationId, lastName, guestName
         </div>
       </div>
 
+      {/* The price and the request action share this one right-anchored
+          column — same shape/position at every breakpoint, never a
+          separate middle column between the content and this action
+          area. */}
       <div className="flex min-w-0 flex-col items-stretch gap-3 sm:w-64 sm:flex-shrink-0">
         {item.unitPrice && (
           <CatalogItemPriceBlock
@@ -492,7 +512,6 @@ function RequestCatalogItem({ item, language, reservationId, lastName, guestName
             language={language}
             suffix={t(language, "ifConfirmed")}
             widthClassName="min-w-0"
-            visibilityClassName="sm:hidden"
           />
         )}
 
