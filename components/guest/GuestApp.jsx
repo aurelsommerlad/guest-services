@@ -20,13 +20,6 @@ const PRIMARY_BUTTON =
   "inline-flex w-full items-center justify-center rounded-md bg-stone-900 px-6 py-3.5 text-sm font-semibold uppercase tracking-wide text-white transition hover:bg-black disabled:cursor-not-allowed disabled:opacity-50";
 const SECONDARY_BUTTON =
   "inline-flex items-center justify-center rounded-md border border-stone-300 bg-white px-5 py-2.5 text-sm font-medium uppercase tracking-wide text-stone-700 transition hover:border-stone-400 hover:bg-stone-50";
-// A filled, very light warm-neutral button — same shape/size/typography as
-// PRIMARY_BUTTON, just recolored so it reads as visually subordinate to a
-// real black primary action. Used ONLY by the pre-arrival stay-extension
-// card (both its initial and its expanded-confirmation button) — never an
-// outlined/white button, never black.
-const LIGHT_BUTTON =
-  "inline-flex w-full items-center justify-center rounded-md bg-stone-100 px-6 py-3.5 text-sm font-semibold uppercase tracking-wide text-stone-900 transition hover:bg-stone-200 disabled:cursor-not-allowed disabled:opacity-50";
 // text-base (16px) is intentional, not the original 15px: iOS Safari
 // auto-zooms the page on focus for any form control whose computed
 // font-size is below 16px. Below that threshold this exact input (the
@@ -693,12 +686,14 @@ function StayExtensionCard({ language, offer, reservationId, lastName, onExtende
 // typography, warm inner price box, and green discount badge as the
 // in-house card (see StayExtensionCard/StayExtensionFullDetails above);
 // only less vertical padding, a shorter price box (no extras/city
-// tax/savings/total, no new-departure block), and a light (never black)
-// button make it read as compact/subordinate rather than the main action.
-// Clicking the button never books anything by itself — it only expands to
-// the exact same StayExtensionBreakdown/total used by the in-house card
-// (via StayExtensionFullDetails, new-departure hidden, light final button),
-// so the guest always sees the complete total before the actual confirm.
+// tax/savings/total, no new-departure block), and its initial CTA using
+// the SAME outlined/white style as the guest portal's existing ANFRAGEN
+// button (never filled/black) make it read as compact/subordinate rather
+// than the main action. Clicking that button never books anything by
+// itself — it only expands to the exact same StayExtensionBreakdown/total
+// used by the in-house card (via StayExtensionFullDetails, new-departure
+// hidden), now with the standard black confirm button, so the guest
+// always sees the complete total before the actual confirm click.
 function StayExtensionCompactCard({ language, offer, reservationId, lastName, onExtended }) {
   const [expanded, setExpanded] = useState(false);
   const { status, error, handleConfirm } = useStayExtensionConfirm({ reservationId, lastName, offer, language, onExtended });
@@ -717,7 +712,6 @@ function StayExtensionCompactCard({ language, offer, reservationId, lastName, on
           error={error}
           onConfirm={handleConfirm}
           showNewDeparture={false}
-          buttonClassName={LIGHT_BUTTON}
           buttonLabelKey="stayExtensionFinalButton"
           subtitleKey="stayExtensionCompactSubtitle"
         />
@@ -750,7 +744,7 @@ function StayExtensionCompactCard({ language, offer, reservationId, lastName, on
         </div>
       </div>
 
-      <button type="button" onClick={() => setExpanded(true)} className={`${LIGHT_BUTTON} mt-4`}>
+      <button type="button" onClick={() => setExpanded(true)} className={`${SECONDARY_BUTTON} mt-4 w-full`}>
         {t(language, "stayExtensionButton")}
       </button>
     </div>
