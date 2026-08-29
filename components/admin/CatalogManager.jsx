@@ -30,11 +30,17 @@ const ACTION_TYPE_OPTIONS = [
 // "Stay one more night" upsell — never a fake Apaleo service, so it has no
 // row in the extras list above; a small property-level config instead (see
 // lib/store.js's getExtensionConfig/saveExtensionConfig), so the discount
-// rules can be tuned without a code change.
+// rules can be tuned without a code change. Two independently configurable
+// discount pairs — one per reservation phase (see
+// lib/stayExtension.js's buildExtensionOffer / determineStayExtensionPhase)
+// — since a property may want a smaller incentive before arrival than
+// during the stay, or vice versa.
 const DEFAULT_EXTENSION_CONFIG = {
   extensionNightEnabled: false,
-  extensionDiscountOneNightGap: 20,
-  extensionDiscountStandard: 15,
+  extensionDiscountPreArrivalOneNightGap: 15,
+  extensionDiscountPreArrivalStandard: 10,
+  extensionDiscountInHouseOneNightGap: 20,
+  extensionDiscountInHouseStandard: 15,
   minSellableStayNights: 2,
 };
 
@@ -103,45 +109,80 @@ function ExtensionConfigPanel({ propertyId }) {
         Im Gäste-Portal anbieten
       </label>
 
-      <div className="mt-3 grid gap-4 sm:grid-cols-3">
-        <div>
-          <label className="block text-xs font-medium text-slate-500">Rabatt bei 1 freier Nacht (%)</label>
-          <input
-            type="number"
-            min="0"
-            max="100"
-            value={config.extensionDiscountOneNightGap}
-            onChange={(e) => update({ extensionDiscountOneNightGap: e.target.value })}
-            className="mt-1 w-full rounded-md border border-slate-300 px-3 py-1.5 text-sm"
-          />
-          <p className="mt-0.5 text-xs text-slate-400">Schließt die Lücke vollständig.</p>
+      <div className="mt-4 grid gap-4 sm:grid-cols-2">
+        <div className="rounded-lg border border-slate-200 p-3">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-600">Vor der Anreise</p>
+          <div className="mt-2 grid gap-3 sm:grid-cols-2">
+            <div>
+              <label className="block text-xs font-medium text-slate-500">Lücke von 1 Nacht (%)</label>
+              <input
+                type="number"
+                min="0"
+                max="100"
+                value={config.extensionDiscountPreArrivalOneNightGap}
+                onChange={(e) => update({ extensionDiscountPreArrivalOneNightGap: e.target.value })}
+                className="mt-1 w-full rounded-md border border-slate-300 px-3 py-1.5 text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-500">Standard (%)</label>
+              <input
+                type="number"
+                min="0"
+                max="100"
+                value={config.extensionDiscountPreArrivalStandard}
+                onChange={(e) => update({ extensionDiscountPreArrivalStandard: e.target.value })}
+                className="mt-1 w-full rounded-md border border-slate-300 px-3 py-1.5 text-sm"
+              />
+            </div>
+          </div>
         </div>
-        <div>
-          <label className="block text-xs font-medium text-slate-500">Rabatt bei größerer Lücke (%)</label>
-          <input
-            type="number"
-            min="0"
-            max="100"
-            value={config.extensionDiscountStandard}
-            onChange={(e) => update({ extensionDiscountStandard: e.target.value })}
-            className="mt-1 w-full rounded-md border border-slate-300 px-3 py-1.5 text-sm"
-          />
-          <p className="mt-0.5 text-xs text-slate-400">Wenn nach der Verlängerung noch genug Restnächte frei sind.</p>
+        <div className="rounded-lg border border-slate-200 p-3">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-600">Während des Aufenthalts</p>
+          <div className="mt-2 grid gap-3 sm:grid-cols-2">
+            <div>
+              <label className="block text-xs font-medium text-slate-500">Lücke von 1 Nacht (%)</label>
+              <input
+                type="number"
+                min="0"
+                max="100"
+                value={config.extensionDiscountInHouseOneNightGap}
+                onChange={(e) => update({ extensionDiscountInHouseOneNightGap: e.target.value })}
+                className="mt-1 w-full rounded-md border border-slate-300 px-3 py-1.5 text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-500">Standard (%)</label>
+              <input
+                type="number"
+                min="0"
+                max="100"
+                value={config.extensionDiscountInHouseStandard}
+                onChange={(e) => update({ extensionDiscountInHouseStandard: e.target.value })}
+                className="mt-1 w-full rounded-md border border-slate-300 px-3 py-1.5 text-sm"
+              />
+            </div>
+          </div>
         </div>
-        <div>
-          <label className="block text-xs font-medium text-slate-500">Mindestbelegung (Nächte)</label>
-          <input
-            type="number"
-            min="1"
-            value={config.minSellableStayNights}
-            onChange={(e) => update({ minSellableStayNights: e.target.value })}
-            className="mt-1 w-full rounded-md border border-slate-300 px-3 py-1.5 text-sm"
-          />
-          <p className="mt-0.5 text-xs text-slate-400">
-            Kürzeste normal verkaufte Aufenthaltsdauer. Bleiben nach der Verlängerung weniger Restnächte übrig, wird
-            kein Angebot gezeigt.
-          </p>
-        </div>
+      </div>
+      <p className="mt-2 text-xs text-slate-400">
+        „Lücke von 1 Nacht“ schließt die Lücke vollständig; „Standard“ gilt, wenn nach der Verlängerung noch genug
+        Restnächte frei sind.
+      </p>
+
+      <div className="mt-3">
+        <label className="block text-xs font-medium text-slate-500">Mindestbelegung (Nächte)</label>
+        <input
+          type="number"
+          min="1"
+          value={config.minSellableStayNights}
+          onChange={(e) => update({ minSellableStayNights: e.target.value })}
+          className="mt-1 w-full max-w-xs rounded-md border border-slate-300 px-3 py-1.5 text-sm"
+        />
+        <p className="mt-0.5 text-xs text-slate-400">
+          Kürzeste normal verkaufte Aufenthaltsdauer. Bleiben nach der Verlängerung weniger Restnächte übrig, wird kein
+          Angebot gezeigt.
+        </p>
       </div>
 
       <div className="mt-4 flex items-center gap-3">

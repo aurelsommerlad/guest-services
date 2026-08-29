@@ -267,6 +267,35 @@ function ReservationPicker({ language, reservations, onSelect }) {
   );
 }
 
+// The right-aligned "amount + price unit" block shared by every extras card
+// (Parkplatz/Zusatzperson via InstantCatalogItem, Hund/etc. via
+// RequestCatalogItem) so the price always reads the same way — bold amount,
+// unit label directly underneath — regardless of which card renders it.
+// `widthClassName` defaults to a fixed width on both mobile and desktop
+// (never "auto") so the column doesn't reflow per-card as prices/unit-label
+// lengths vary; callers needing a different mobile treatment (see
+// RequestCatalogItem's mobile-only occurrence) can override it.
+function CatalogItemPriceBlock({
+  unitPrice,
+  priceUnitLabel,
+  language,
+  suffix,
+  widthClassName = "w-24 flex-shrink-0 sm:w-28",
+  visibilityClassName = "",
+}) {
+  const unitLabelLine = priceUnitLabel ? (suffix ? `${priceUnitLabel} · ${suffix}` : priceUnitLabel) : suffix;
+  return (
+    <div className={`${widthClassName} text-right ${visibilityClassName}`}>
+      <div className="text-lg font-semibold text-stone-900">{formatPrice(unitPrice, language)}</div>
+      {unitLabelLine && (
+        <div className="break-words text-xs font-light uppercase tracking-normal text-stone-400 sm:text-[13px]">
+          {unitLabelLine}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function InstantCatalogItem({ item, language, count, onChange, plates, onPlateChange }) {
   const restricted = item.unitGroupRestricted;
   // maxQuantity is only ever set for requiresRemainingCapacity items (e.g.
@@ -304,14 +333,7 @@ function InstantCatalogItem({ item, language, count, onChange, plates, onPlateCh
             <h3 className={`${HEADING_CLASS} min-w-0 flex-1 break-words text-base text-stone-900 sm:text-lg`}>
               {displayName}
             </h3>
-            <div className="w-24 flex-shrink-0 text-right sm:w-auto">
-              <div className="text-lg font-semibold text-stone-900">{formatPrice(item.unitPrice, language)}</div>
-              {priceUnitLabel && (
-                <div className="break-words text-xs font-light uppercase tracking-normal text-stone-400 sm:text-[13px]">
-                  {priceUnitLabel}
-                </div>
-              )}
-            </div>
+            <CatalogItemPriceBlock unitPrice={item.unitPrice} priceUnitLabel={priceUnitLabel} language={language} />
           </div>
           {description && <p className="mt-1 break-words text-sm text-stone-500">{description}</p>}
           {restricted ? (
@@ -434,11 +456,22 @@ function RequestCatalogItem({ item, language, reservationId, lastName, guestName
           )}
         </div>
         <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <h3 className={`${HEADING_CLASS} break-words text-base text-stone-900 sm:text-lg`}>{displayName}</h3>
-            <span className="rounded-full border border-stone-300 px-2 py-0.5 text-[11px] font-medium uppercase tracking-wide text-stone-500">
-              {t(language, "onRequestBadge")}
-            </span>
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+              <h3 className={`${HEADING_CLASS} break-words text-base text-stone-900 sm:text-lg`}>{displayName}</h3>
+              <span className="rounded-full border border-stone-300 px-2 py-0.5 text-[11px] font-medium uppercase tracking-wide text-stone-500">
+                {t(language, "onRequestBadge")}
+              </span>
+            </div>
+            {item.unitPrice && (
+              <CatalogItemPriceBlock
+                unitPrice={item.unitPrice}
+                priceUnitLabel={priceUnitLabel}
+                language={language}
+                suffix={t(language, "ifConfirmed")}
+                visibilityClassName="hidden sm:block"
+              />
+            )}
           </div>
           {description && <p className="mt-1 break-words text-sm text-stone-500">{description}</p>}
           {restricted ? (
@@ -453,12 +486,14 @@ function RequestCatalogItem({ item, language, reservationId, lastName, guestName
 
       <div className="flex min-w-0 flex-col items-stretch gap-3 sm:w-64 sm:flex-shrink-0">
         {item.unitPrice && (
-          <div className="min-w-0 text-right">
-            <div className="text-lg font-semibold text-stone-900">{formatPrice(item.unitPrice, language)}</div>
-            <div className="break-words text-xs font-light uppercase tracking-normal text-stone-400 sm:text-[13px]">
-              {priceUnitLabel ? `${priceUnitLabel} · ${t(language, "ifConfirmed")}` : t(language, "ifConfirmed")}
-            </div>
-          </div>
+          <CatalogItemPriceBlock
+            unitPrice={item.unitPrice}
+            priceUnitLabel={priceUnitLabel}
+            language={language}
+            suffix={t(language, "ifConfirmed")}
+            widthClassName="min-w-0"
+            visibilityClassName="sm:hidden"
+          />
         )}
 
         {restricted ? (

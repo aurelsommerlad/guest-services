@@ -42,6 +42,16 @@ const CONFIG = {
   minSellableStayNights: 2,
   extensionDiscountOneNightGap: 20,
   extensionDiscountStandard: 15,
+  // buildExtensionOffer (unlike decideExtensionOffer below) reads only the
+  // phase-specific fields — both phases set to the same numbers here so
+  // these generic (non-phase-focused) tests get the identical
+  // discountPercent regardless of which `phase` they pass in. See the
+  // dedicated "phase-specific discount" tests further below for config
+  // where the two phases actually differ.
+  extensionDiscountPreArrivalOneNightGap: 20,
+  extensionDiscountPreArrivalStandard: 15,
+  extensionDiscountInHouseOneNightGap: 20,
+  extensionDiscountInHouseStandard: 15,
 };
 
 test("decideExtensionOffer: gap 0 -> no offer", () => {
@@ -140,19 +150,20 @@ test("addOneDay: handles a month/year boundary", () => {
 test("buildExtensionOffer: task's worked example end to end (160 EUR average, 1-night gap -> 20% off -> 128.00)", () => {
   const reservation = { departure: "2026-10-16T10:00:00+02:00" };
   const timeSlices = [slice("RP1", 160), slice("RP1", 160), slice("RP1", 160), slice("RP1", 160)];
-  const offer = buildExtensionOffer({ reservation, timeSlices, gap: 1, config: CONFIG });
+  const offer = buildExtensionOffer({ reservation, timeSlices, gap: 1, config: CONFIG, phase: "in_house" });
   assert.ok(offer);
   assert.deepEqual(offer.averageNightlyRate, { amount: 160, currency: "EUR" });
   assert.deepEqual(offer.extensionPrice, { amount: 128, currency: "EUR" });
   assert.equal(offer.discountPercent, 20);
   assert.equal(offer.currentDeparture, "2026-10-16");
   assert.equal(offer.newDeparture, "2026-10-17");
+  assert.equal(offer.phase, "in_house");
 });
 
 test("buildExtensionOffer: 4-night gap example (160 EUR average -> 15% off -> 136.00)", () => {
   const reservation = { departure: "2026-10-16T10:00:00+02:00" };
   const timeSlices = [slice("RP1", 160), slice("RP1", 160)];
-  const offer = buildExtensionOffer({ reservation, timeSlices, gap: 4, config: CONFIG });
+  const offer = buildExtensionOffer({ reservation, timeSlices, gap: 4, config: CONFIG, phase: "before_arrival" });
   assert.deepEqual(offer.extensionPrice, { amount: 136, currency: "EUR" });
   assert.equal(offer.discountPercent, 15);
 });
@@ -160,8 +171,67 @@ test("buildExtensionOffer: 4-night gap example (160 EUR average -> 15% off -> 13
 test("buildExtensionOffer: returns null (no offer shown at all) when the gap doesn't qualify", () => {
   const reservation = { departure: "2026-10-16T10:00:00+02:00" };
   const timeSlices = [slice("RP1", 160)];
-  assert.equal(buildExtensionOffer({ reservation, timeSlices, gap: 0, config: CONFIG }), null);
-  assert.equal(buildExtensionOffer({ reservation, timeSlices, gap: 2, config: CONFIG }), null);
+  assert.equal(buildExtensionOffer({ reservation, timeSlices, gap: 0, config: CONFIG, phase: "before_arrival" }), null);
+  assert.equal(buildExtensionOffer({ reservation, timeSlices, gap: 2, config: CONFIG, phase: "in_house" }), null);
+});
+
+// --- Phase-specific discount selection (section 2/5 of the spec) ---------
+//
+// buildExtensionOffer's gap-based offer/no-offer decision (decideExtensionOffer
+// above) is completely unaffected by phase — only WHICH discount percentage
+// gets plugged into that unchanged decision depends on it. Distinct
+// pre-arrival vs in-house values here (unlike CONFIG above, which
+// deliberately keeps both phases identical) make that selection observable.
+const PHASE_CONFIG = {
+  minSellableStayNights: 2,
+  extensionDiscountPreArrivalOneNightGap: 15,
+  extensionDiscountPreArrivalStandard: 10,
+  extensionDiscountInHouseOneNightGap: 20,
+  extensionDiscountInHouseStandard: 15,
+};
+
+test("buildExtensionOffer: pre-arrival, gap 1 (closes the gap) -> pre-arrival one-night-gap discount (15%)", () => {
+  const reservation = { departure: "2026-10-16T10:00:00+02:00" };
+  const timeSlices = [slice("RP1", 200), slice("RP1", 200)];
+  const offer = buildExtensionOffer({ reservation, timeSlices, gap: 1, config: PHASE_CONFIG, phase: "before_arrival" });
+  assert.ok(offer);
+  assert.equal(offer.discountPercent, 15);
+  assert.equal(offer.phase, "before_arrival");
+});
+
+test("buildExtensionOffer: pre-arrival, standard gap (> minSellableStayNights) -> pre-arrival standard discount (10%)", () => {
+  const reservation = { departure: "2026-10-16T10:00:00+02:00" };
+  const timeSlices = [slice("RP1", 200), slice("RP1", 200)];
+  const offer = buildExtensionOffer({ reservation, timeSlices, gap: 4, config: PHASE_CONFIG, phase: "before_arrival" });
+  assert.ok(offer);
+  assert.equal(offer.discountPercent, 10);
+});
+
+test("buildExtensionOffer: in_house, gap 1 (closes the gap) -> in-house one-night-gap discount (20%)", () => {
+  const reservation = { departure: "2026-10-16T10:00:00+02:00" };
+  const timeSlices = [slice("RP1", 200), slice("RP1", 200)];
+  const offer = buildExtensionOffer({ reservation, timeSlices, gap: 1, config: PHASE_CONFIG, phase: "in_house" });
+  assert.ok(offer);
+  assert.equal(offer.discountPercent, 20);
+  assert.equal(offer.phase, "in_house");
+});
+
+test("buildExtensionOffer: in_house, standard gap (> minSellableStayNights) -> in-house standard discount (15%)", () => {
+  const reservation = { departure: "2026-10-16T10:00:00+02:00" };
+  const timeSlices = [slice("RP1", 200), slice("RP1", 200)];
+  const offer = buildExtensionOffer({ reservation, timeSlices, gap: 4, config: PHASE_CONFIG, phase: "in_house" });
+  assert.ok(offer);
+  assert.equal(offer.discountPercent, 15);
+});
+
+test("buildExtensionOffer: the same gap produces different discountPercent depending only on phase, config held constant", () => {
+  const reservation = { departure: "2026-10-16T10:00:00+02:00" };
+  const timeSlices = [slice("RP1", 200), slice("RP1", 200)];
+  const preArrival = buildExtensionOffer({ reservation, timeSlices, gap: 1, config: PHASE_CONFIG, phase: "before_arrival" });
+  const inHouse = buildExtensionOffer({ reservation, timeSlices, gap: 1, config: PHASE_CONFIG, phase: "in_house" });
+  assert.equal(preArrival.discountPercent, 15);
+  assert.equal(inHouse.discountPercent, 20);
+  assert.notEqual(preArrival.discountPercent, inHouse.discountPercent);
 });
 
 test("buildStayExtensionAmendmentPayload: existing time slice prices are resent completely unchanged", () => {
@@ -788,8 +858,10 @@ test("getStayExtensionOffer: full happy path — 1-night gap on a direct reserva
   await withCleanLocalDb(async () => {
     await saveExtensionConfig("TESTPROP", {
       extensionNightEnabled: true,
-      extensionDiscountOneNightGap: 20,
-      extensionDiscountStandard: 15,
+      extensionDiscountPreArrivalOneNightGap: 20,
+      extensionDiscountPreArrivalStandard: 15,
+      extensionDiscountInHouseOneNightGap: 20,
+      extensionDiscountInHouseStandard: 15,
       minSellableStayNights: 2,
     });
     const reservation = reservationFixture();
@@ -811,8 +883,10 @@ test("getStayExtensionOffer: feature disabled for the property -> null, no offer
   await withCleanLocalDb(async () => {
     await saveExtensionConfig("TESTPROP", {
       extensionNightEnabled: false,
-      extensionDiscountOneNightGap: 20,
-      extensionDiscountStandard: 15,
+      extensionDiscountPreArrivalOneNightGap: 20,
+      extensionDiscountPreArrivalStandard: 15,
+      extensionDiscountInHouseOneNightGap: 20,
+      extensionDiscountInHouseStandard: 15,
       minSellableStayNights: 2,
     });
     const reservation = reservationFixture();
@@ -831,8 +905,10 @@ test("getStayExtensionOffer: Apaleo reports AmendDeparture not allowed -> null (
   await withCleanLocalDb(async () => {
     await saveExtensionConfig("TESTPROP", {
       extensionNightEnabled: true,
-      extensionDiscountOneNightGap: 20,
-      extensionDiscountStandard: 15,
+      extensionDiscountPreArrivalOneNightGap: 20,
+      extensionDiscountPreArrivalStandard: 15,
+      extensionDiscountInHouseOneNightGap: 20,
+      extensionDiscountInHouseStandard: 15,
       minSellableStayNights: 2,
     });
     const reservation = reservationFixture({ actions: [{ action: "AmendDeparture", isAllowed: false }] });
@@ -850,8 +926,10 @@ test("confirmStayExtension: happy path — exactly one amend call, existing nigh
   await withCleanLocalDb(async () => {
     await saveExtensionConfig("TESTPROP", {
       extensionNightEnabled: true,
-      extensionDiscountOneNightGap: 20,
-      extensionDiscountStandard: 15,
+      extensionDiscountPreArrivalOneNightGap: 20,
+      extensionDiscountPreArrivalStandard: 15,
+      extensionDiscountInHouseOneNightGap: 20,
+      extensionDiscountInHouseStandard: 15,
       minSellableStayNights: 2,
     });
     const reservation = reservationFixture();
@@ -891,12 +969,49 @@ test("confirmStayExtension: happy path — exactly one amend call, existing nigh
   });
 });
 
+test("confirmStayExtension: the actually-amended price uses the phase-correct discount, not the other phase's", async () => {
+  await withCleanLocalDb(async () => {
+    await saveExtensionConfig("TESTPROP", {
+      extensionNightEnabled: true,
+      extensionDiscountPreArrivalOneNightGap: 15,
+      extensionDiscountPreArrivalStandard: 10,
+      extensionDiscountInHouseOneNightGap: 20,
+      extensionDiscountInHouseStandard: 15,
+      minSellableStayNights: 2,
+    });
+    // reservationFixture()'s default arrival/departure are both in the
+    // future relative to any real wall-clock date this test could run on,
+    // and it carries no InHouse status — so this is before_arrival, and the
+    // amended price must reflect the pre-arrival (15%), not in-house (20%),
+    // one-night-gap discount: 160 * (1 - 0.15) = 136.00.
+    const reservation = reservationFixture();
+    const { calls, restore } = installExtensionFetchMock({ reservation, availableNights: [true, false] });
+    try {
+      const result = await confirmStayExtension({
+        reservationId: reservation.id,
+        expectedCurrentDeparture: "2026-10-13",
+      });
+      assert.deepEqual(result.extensionPrice, { amount: 136, currency: "EUR" });
+
+      const amendCalls = calls.filter((c) => c.pathname.endsWith("/amend"));
+      assert.equal(amendCalls[0].body.timeSlices[3].totalGrossAmount.amount, 136);
+
+      const records = await listExtensionRecords();
+      assert.equal(records[0].discountPercent, 15);
+    } finally {
+      restore();
+    }
+  });
+});
+
 test("confirmStayExtension: works identically for a Booking.com/ChannelManager reservation", async () => {
   await withCleanLocalDb(async () => {
     await saveExtensionConfig("TESTPROP", {
       extensionNightEnabled: true,
-      extensionDiscountOneNightGap: 20,
-      extensionDiscountStandard: 15,
+      extensionDiscountPreArrivalOneNightGap: 20,
+      extensionDiscountPreArrivalStandard: 15,
+      extensionDiscountInHouseOneNightGap: 20,
+      extensionDiscountInHouseStandard: 15,
       minSellableStayNights: 2,
     });
     const reservation = reservationFixture({ channelCode: "ChannelManager", source: "Booking.com" });
@@ -921,8 +1036,10 @@ test("confirmStayExtension: availability disappeared since the offer was shown -
   await withCleanLocalDb(async () => {
     await saveExtensionConfig("TESTPROP", {
       extensionNightEnabled: true,
-      extensionDiscountOneNightGap: 20,
-      extensionDiscountStandard: 15,
+      extensionDiscountPreArrivalOneNightGap: 20,
+      extensionDiscountPreArrivalStandard: 15,
+      extensionDiscountInHouseOneNightGap: 20,
+      extensionDiscountInHouseStandard: 15,
       minSellableStayNights: 2,
     });
     const reservation = reservationFixture();
@@ -945,8 +1062,10 @@ test("confirmStayExtension: reservation already extended (departure moved since 
   await withCleanLocalDb(async () => {
     await saveExtensionConfig("TESTPROP", {
       extensionNightEnabled: true,
-      extensionDiscountOneNightGap: 20,
-      extensionDiscountStandard: 15,
+      extensionDiscountPreArrivalOneNightGap: 20,
+      extensionDiscountPreArrivalStandard: 15,
+      extensionDiscountInHouseOneNightGap: 20,
+      extensionDiscountInHouseStandard: 15,
       minSellableStayNights: 2,
     });
     // The reservation's real current departure is already one night later
@@ -969,8 +1088,10 @@ test("confirmStayExtension: duplicate/concurrent submission — the second call 
   await withCleanLocalDb(async () => {
     await saveExtensionConfig("TESTPROP", {
       extensionNightEnabled: true,
-      extensionDiscountOneNightGap: 20,
-      extensionDiscountStandard: 15,
+      extensionDiscountPreArrivalOneNightGap: 20,
+      extensionDiscountPreArrivalStandard: 15,
+      extensionDiscountInHouseOneNightGap: 20,
+      extensionDiscountInHouseStandard: 15,
       minSellableStayNights: 2,
     });
     const reservation = reservationFixture();
@@ -1003,8 +1124,10 @@ test("getStayExtensionOffer: includes eligible extras and a city tax estimate in
   await withCleanLocalDb(async () => {
     await saveExtensionConfig("TESTPROP", {
       extensionNightEnabled: true,
-      extensionDiscountOneNightGap: 20,
-      extensionDiscountStandard: 15,
+      extensionDiscountPreArrivalOneNightGap: 20,
+      extensionDiscountPreArrivalStandard: 15,
+      extensionDiscountInHouseOneNightGap: 20,
+      extensionDiscountInHouseStandard: 15,
       minSellableStayNights: 2,
     });
     const reservation = reservationFixture({ hasCityTax: true });
@@ -1037,8 +1160,10 @@ test("getStayExtensionOffer: an InHouse reservation's offer is tagged phase 'in_
   await withCleanLocalDb(async () => {
     await saveExtensionConfig("TESTPROP", {
       extensionNightEnabled: true,
-      extensionDiscountOneNightGap: 20,
-      extensionDiscountStandard: 15,
+      extensionDiscountPreArrivalOneNightGap: 20,
+      extensionDiscountPreArrivalStandard: 15,
+      extensionDiscountInHouseOneNightGap: 20,
+      extensionDiscountInHouseStandard: 15,
       minSellableStayNights: 2,
     });
     const reservation = reservationFixture({ status: "InHouse" });
@@ -1057,8 +1182,10 @@ test("getStayExtensionOffer: a Confirmed (not yet checked in) reservation's offe
   await withCleanLocalDb(async () => {
     await saveExtensionConfig("TESTPROP", {
       extensionNightEnabled: true,
-      extensionDiscountOneNightGap: 20,
-      extensionDiscountStandard: 15,
+      extensionDiscountPreArrivalOneNightGap: 20,
+      extensionDiscountPreArrivalStandard: 15,
+      extensionDiscountInHouseOneNightGap: 20,
+      extensionDiscountInHouseStandard: 15,
       minSellableStayNights: 2,
     });
     // Arrival deliberately far in the future (unlike the fixture's default
@@ -1081,12 +1208,66 @@ test("getStayExtensionOffer: a Confirmed (not yet checked in) reservation's offe
   });
 });
 
+test("getStayExtensionOffer: end to end, a before_arrival reservation's discountPercent comes from the pre-arrival config, not the in-house one", async () => {
+  await withCleanLocalDb(async () => {
+    await saveExtensionConfig("TESTPROP", {
+      extensionNightEnabled: true,
+      extensionDiscountPreArrivalOneNightGap: 15,
+      extensionDiscountPreArrivalStandard: 10,
+      extensionDiscountInHouseOneNightGap: 20,
+      extensionDiscountInHouseStandard: 15,
+      minSellableStayNights: 2,
+    });
+    const reservation = reservationFixture({
+      status: "Confirmed",
+      arrival: "2030-01-01T14:00:00+01:00",
+      departure: "2030-01-04T11:00:00+01:00",
+    });
+    // availableNights: [true, false] -> gap 1, the one-night-gap branch.
+    const { restore } = installExtensionFetchMock({ reservation, availableNights: [true, false] });
+    try {
+      const offer = await getStayExtensionOffer(reservation);
+      assert.ok(offer);
+      assert.equal(offer.phase, "before_arrival");
+      assert.equal(offer.discountPercent, 15);
+    } finally {
+      restore();
+    }
+  });
+});
+
+test("getStayExtensionOffer: end to end, an InHouse reservation's discountPercent comes from the in-house config, not the pre-arrival one", async () => {
+  await withCleanLocalDb(async () => {
+    await saveExtensionConfig("TESTPROP", {
+      extensionNightEnabled: true,
+      extensionDiscountPreArrivalOneNightGap: 15,
+      extensionDiscountPreArrivalStandard: 10,
+      extensionDiscountInHouseOneNightGap: 20,
+      extensionDiscountInHouseStandard: 15,
+      minSellableStayNights: 2,
+    });
+    const reservation = reservationFixture({ status: "InHouse" });
+    // availableNights: [true, false] -> gap 1, the one-night-gap branch.
+    const { restore } = installExtensionFetchMock({ reservation, availableNights: [true, false] });
+    try {
+      const offer = await getStayExtensionOffer(reservation);
+      assert.ok(offer);
+      assert.equal(offer.phase, "in_house");
+      assert.equal(offer.discountPercent, 20);
+    } finally {
+      restore();
+    }
+  });
+});
+
 test("getStayExtensionOffer: a reservation not subject to city tax never shows a city tax estimate", async () => {
   await withCleanLocalDb(async () => {
     await saveExtensionConfig("TESTPROP", {
       extensionNightEnabled: true,
-      extensionDiscountOneNightGap: 20,
-      extensionDiscountStandard: 15,
+      extensionDiscountPreArrivalOneNightGap: 20,
+      extensionDiscountPreArrivalStandard: 15,
+      extensionDiscountInHouseOneNightGap: 20,
+      extensionDiscountInHouseStandard: 15,
       minSellableStayNights: 2,
     });
     const reservation = reservationFixture({ hasCityTax: false });
@@ -1106,8 +1287,10 @@ test("confirmStayExtension: extends a per-night service covering every original 
   await withCleanLocalDb(async () => {
     await saveExtensionConfig("TESTPROP", {
       extensionNightEnabled: true,
-      extensionDiscountOneNightGap: 20,
-      extensionDiscountStandard: 15,
+      extensionDiscountPreArrivalOneNightGap: 20,
+      extensionDiscountPreArrivalStandard: 15,
+      extensionDiscountInHouseOneNightGap: 20,
+      extensionDiscountInHouseStandard: 15,
       minSellableStayNights: 2,
     });
     const reservation = reservationFixture();
@@ -1147,8 +1330,10 @@ test("confirmStayExtension: never touches a mandatory service or a single-date a
   await withCleanLocalDb(async () => {
     await saveExtensionConfig("TESTPROP", {
       extensionNightEnabled: true,
-      extensionDiscountOneNightGap: 20,
-      extensionDiscountStandard: 15,
+      extensionDiscountPreArrivalOneNightGap: 20,
+      extensionDiscountPreArrivalStandard: 15,
+      extensionDiscountInHouseOneNightGap: 20,
+      extensionDiscountInHouseStandard: 15,
       minSellableStayNights: 2,
     });
     const reservation = reservationFixture();
@@ -1175,8 +1360,10 @@ test("confirmStayExtension: a service whose dates already include the new night 
   await withCleanLocalDb(async () => {
     await saveExtensionConfig("TESTPROP", {
       extensionNightEnabled: true,
-      extensionDiscountOneNightGap: 20,
-      extensionDiscountStandard: 15,
+      extensionDiscountPreArrivalOneNightGap: 20,
+      extensionDiscountPreArrivalStandard: 15,
+      extensionDiscountInHouseOneNightGap: 20,
+      extensionDiscountInHouseStandard: 15,
       minSellableStayNights: 2,
     });
     const reservation = reservationFixture();
@@ -1205,8 +1392,10 @@ test("confirmStayExtension: a failed per-night-service extension never rolls bac
   await withCleanLocalDb(async () => {
     await saveExtensionConfig("TESTPROP", {
       extensionNightEnabled: true,
-      extensionDiscountOneNightGap: 20,
-      extensionDiscountStandard: 15,
+      extensionDiscountPreArrivalOneNightGap: 20,
+      extensionDiscountPreArrivalStandard: 15,
+      extensionDiscountInHouseOneNightGap: 20,
+      extensionDiscountInHouseStandard: 15,
       minSellableStayNights: 2,
     });
     const reservation = reservationFixture();
@@ -1235,8 +1424,10 @@ test("confirmStayExtension: city tax charge missing for the new night after amen
   await withCleanLocalDb(async () => {
     await saveExtensionConfig("TESTPROP", {
       extensionNightEnabled: true,
-      extensionDiscountOneNightGap: 20,
-      extensionDiscountStandard: 15,
+      extensionDiscountPreArrivalOneNightGap: 20,
+      extensionDiscountPreArrivalStandard: 15,
+      extensionDiscountInHouseOneNightGap: 20,
+      extensionDiscountInHouseStandard: 15,
       minSellableStayNights: 2,
     });
     const reservation = reservationFixture({ hasCityTax: true });
@@ -1259,8 +1450,10 @@ test("confirmStayExtension: city tax charge found for the new night -> verified 
   await withCleanLocalDb(async () => {
     await saveExtensionConfig("TESTPROP", {
       extensionNightEnabled: true,
-      extensionDiscountOneNightGap: 20,
-      extensionDiscountStandard: 15,
+      extensionDiscountPreArrivalOneNightGap: 20,
+      extensionDiscountPreArrivalStandard: 15,
+      extensionDiscountInHouseOneNightGap: 20,
+      extensionDiscountInHouseStandard: 15,
       minSellableStayNights: 2,
     });
     const reservation = reservationFixture({ hasCityTax: true });
@@ -1289,8 +1482,10 @@ test("confirmStayExtension: moves a Late-Checkout-style departure-day service fr
   await withCleanLocalDb(async () => {
     await saveExtensionConfig("TESTPROP", {
       extensionNightEnabled: true,
-      extensionDiscountOneNightGap: 20,
-      extensionDiscountStandard: 15,
+      extensionDiscountPreArrivalOneNightGap: 20,
+      extensionDiscountPreArrivalStandard: 15,
+      extensionDiscountInHouseOneNightGap: 20,
+      extensionDiscountInHouseStandard: 15,
       minSellableStayNights: 2,
     });
     const reservation = reservationFixture();
@@ -1333,8 +1528,10 @@ test("confirmStayExtension: a Late-Checkout-style service already on the new dep
   await withCleanLocalDb(async () => {
     await saveExtensionConfig("TESTPROP", {
       extensionNightEnabled: true,
-      extensionDiscountOneNightGap: 20,
-      extensionDiscountStandard: 15,
+      extensionDiscountPreArrivalOneNightGap: 20,
+      extensionDiscountPreArrivalStandard: 15,
+      extensionDiscountInHouseOneNightGap: 20,
+      extensionDiscountInHouseStandard: 15,
       minSellableStayNights: 2,
     });
     const reservation = reservationFixture();
@@ -1365,8 +1562,10 @@ test("confirmStayExtension: a single-date service at the old departure with avai
   await withCleanLocalDb(async () => {
     await saveExtensionConfig("TESTPROP", {
       extensionNightEnabled: true,
-      extensionDiscountOneNightGap: 20,
-      extensionDiscountStandard: 15,
+      extensionDiscountPreArrivalOneNightGap: 20,
+      extensionDiscountPreArrivalStandard: 15,
+      extensionDiscountInHouseOneNightGap: 20,
+      extensionDiscountInHouseStandard: 15,
       minSellableStayNights: 2,
     });
     const reservation = reservationFixture();
@@ -1393,8 +1592,10 @@ test("confirmStayExtension: a mandatory departure-day service (e.g. final cleani
   await withCleanLocalDb(async () => {
     await saveExtensionConfig("TESTPROP", {
       extensionNightEnabled: true,
-      extensionDiscountOneNightGap: 20,
-      extensionDiscountStandard: 15,
+      extensionDiscountPreArrivalOneNightGap: 20,
+      extensionDiscountPreArrivalStandard: 15,
+      extensionDiscountInHouseOneNightGap: 20,
+      extensionDiscountInHouseStandard: 15,
       minSellableStayNights: 2,
     });
     const reservation = reservationFixture();
@@ -1422,8 +1623,10 @@ test("confirmStayExtension: a Departure-mode service without postNextDay: true i
   await withCleanLocalDb(async () => {
     await saveExtensionConfig("TESTPROP", {
       extensionNightEnabled: true,
-      extensionDiscountOneNightGap: 20,
-      extensionDiscountStandard: 15,
+      extensionDiscountPreArrivalOneNightGap: 20,
+      extensionDiscountPreArrivalStandard: 15,
+      extensionDiscountInHouseOneNightGap: 20,
+      extensionDiscountInHouseStandard: 15,
       minSellableStayNights: 2,
     });
     const reservation = reservationFixture();
@@ -1450,8 +1653,10 @@ test("confirmStayExtension: a failed Late-Checkout move never rolls back the acc
   await withCleanLocalDb(async () => {
     await saveExtensionConfig("TESTPROP", {
       extensionNightEnabled: true,
-      extensionDiscountOneNightGap: 20,
-      extensionDiscountStandard: 15,
+      extensionDiscountPreArrivalOneNightGap: 20,
+      extensionDiscountPreArrivalStandard: 15,
+      extensionDiscountInHouseOneNightGap: 20,
+      extensionDiscountInHouseStandard: 15,
       minSellableStayNights: 2,
     });
     const reservation = reservationFixture();

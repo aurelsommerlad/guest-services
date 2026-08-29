@@ -28,8 +28,10 @@ export async function POST(request) {
   }
 
   if (
-    !Number.isFinite(Number(config.extensionDiscountOneNightGap)) ||
-    !Number.isFinite(Number(config.extensionDiscountStandard)) ||
+    !Number.isFinite(Number(config.extensionDiscountPreArrivalOneNightGap)) ||
+    !Number.isFinite(Number(config.extensionDiscountPreArrivalStandard)) ||
+    !Number.isFinite(Number(config.extensionDiscountInHouseOneNightGap)) ||
+    !Number.isFinite(Number(config.extensionDiscountInHouseStandard)) ||
     !Number.isFinite(Number(config.minSellableStayNights)) ||
     Number(config.minSellableStayNights) < 1
   ) {
