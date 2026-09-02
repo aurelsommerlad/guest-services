@@ -7,6 +7,7 @@ import { usePathname, useRouter } from "next/navigation";
 const NAV_ITEMS = [
   { href: "/admin/orders", label: "Bestellungen", roles: ["admin", "manager", "viewer"] },
   { href: "/admin/requests", label: "Anfragen", roles: ["admin", "manager", "viewer"] },
+  { href: "/admin/stay-extensions", label: "Verlängerungsnächte", roles: ["admin", "manager", "viewer"] },
   { href: "/admin/catalog", label: "Katalog", roles: ["admin", "manager"] },
   { href: "/admin/users", label: "Benutzer", roles: ["admin"] },
 ];

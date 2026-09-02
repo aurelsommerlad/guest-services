@@ -32,6 +32,7 @@ import {
   buildLateCheckoutMoveDates,
   verifyLateCheckoutMove,
   determineStayExtensionPhase,
+  computeExtensionAdditionalTotal,
 } from "../lib/stayExtension.js";
 
 // ---------------------------------------------------------------------
@@ -468,6 +469,53 @@ test("buildExtensionPricePreview: sums accommodation (already discounted) + extr
 test("buildExtensionPricePreview: with no extras and no city tax, the total equals the accommodation price alone", () => {
   const total = buildExtensionPricePreview({ extensionPrice: { amount: 93.5, currency: "EUR" }, extras: [], cityTax: null });
   assert.deepEqual(total, { amount: 93.5, currency: "EUR" });
+});
+
+test("computeExtensionAdditionalTotal: no extras, no city tax (HVQSVNWL-1's exact shape) -> total equals the extension price alone", () => {
+  const total = computeExtensionAdditionalTotal({
+    extensionPrice: { amount: 148.1, currency: "EUR" },
+    extras: [],
+    cityTax: { applicable: false, verified: null, amount: null },
+  });
+  assert.deepEqual(total, { amount: 148.1, currency: "EUR" });
+});
+
+test("computeExtensionAdditionalTotal: sums extension price + genuinely NEW extended extras + verified city tax", () => {
+  const total = computeExtensionAdditionalTotal({
+    extensionPrice: { amount: 100, currency: "EUR" },
+    extras: [
+      { serviceId: "DOG", extended: true, amount: { amount: 15, currency: "EUR" } },
+      // "alreadyDone" extras were already billed before this extension —
+      // never counted as additional.
+      { serviceId: "PARKING", extended: true, alreadyDone: true, amount: { amount: 10, currency: "EUR" } },
+      // A failed extension attempt never added a charge either.
+      { serviceId: "BREAKFAST", extended: false, error: "boom" },
+    ],
+    cityTax: { applicable: true, verified: true, amount: { amount: 3.5, currency: "EUR" } },
+  });
+  assert.deepEqual(total, { amount: 118.5, currency: "EUR" });
+});
+
+test("computeExtensionAdditionalTotal: an extended extra missing its amount -> null (never guesses)", () => {
+  const total = computeExtensionAdditionalTotal({
+    extensionPrice: { amount: 100, currency: "EUR" },
+    extras: [{ serviceId: "DOG", extended: true }],
+    cityTax: null,
+  });
+  assert.equal(total, null);
+});
+
+test("computeExtensionAdditionalTotal: city tax applicable but never verified -> null (never guesses)", () => {
+  const total = computeExtensionAdditionalTotal({
+    extensionPrice: { amount: 100, currency: "EUR" },
+    extras: [],
+    cityTax: { applicable: true, verified: false, amount: null },
+  });
+  assert.equal(total, null);
+});
+
+test("computeExtensionAdditionalTotal: missing extensionPrice -> null", () => {
+  assert.equal(computeExtensionAdditionalTotal({ extensionPrice: null, extras: [], cityTax: null }), null);
 });
 
 test("determineStayExtensionPhase: status 'InHouse' -> in_house (immediate-CTA compact card), regardless of dates", () => {
@@ -963,6 +1011,13 @@ test("confirmStayExtension: happy path — exactly one amend call, existing nigh
       assert.equal(records[0].oldDeparture, "2026-10-13");
       assert.equal(records[0].newDeparture, "2026-10-14");
       assert.equal(records[0].discountPercent, 20);
+      // Additive fields for the Admin "Verlängerungsnächte" view (see
+      // lib/stayExtensionAdmin.js) — added without touching any existing
+      // field/behavior above.
+      assert.equal(records[0].propertyId, "TESTPROP");
+      assert.equal(records[0].phase, "before_arrival");
+      assert.equal(records[0].gap, 1);
+      assert.deepEqual(records[0].totalAdditionalAmount, { amount: 128, currency: "EUR" });
     } finally {
       restore();
     }
