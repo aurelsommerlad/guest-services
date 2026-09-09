@@ -34,10 +34,13 @@ export async function POST(request) {
       // plate is a guest input problem (400), distinct from a capacity
       // conflict (409) or an upstream Apaleo failure (502, the default).
       const capacityExceeded = result.failed.some((f) => f.reason === "capacity_exceeded");
+      const dogLimitExceeded = result.failed.some((f) => f.reason === "dog_limit_exceeded");
       const licensePlateRequired = result.failed.some((f) => f.reason === "vehicle_registration_required");
-      const status = capacityExceeded ? 409 : licensePlateRequired ? 400 : 502;
+      const status = capacityExceeded || dogLimitExceeded ? 409 : licensePlateRequired ? 400 : 502;
       const messageKey = capacityExceeded
         ? "capacityExceededError"
+        : dogLimitExceeded
+        ? "dogLimitExceededError"
         : licensePlateRequired
         ? "licensePlateRequiredError"
         : "bookingFailedError";

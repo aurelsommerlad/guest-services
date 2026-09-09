@@ -300,8 +300,16 @@ function CatalogItemPriceBlock({
 
 function InstantCatalogItem({ item, language, count, onChange, plates, onPlateChange }) {
   const restricted = item.unitGroupRestricted;
-  // maxQuantity is only ever set for requiresRemainingCapacity items (e.g.
-  // "Extra person") — null/undefined for every other item, so this never
+  // True once Apaleo's live reservation already has this maxOnePerReservation
+  // item booked (e.g. "Hund"/dog), from ANY source — this app, Apaleo
+  // directly, an OTA, Make. Distinct from `restricted`: this item IS allowed
+  // for the apartment, it's just already at its per-reservation limit. See
+  // lib/dogBooking.js / lib/guest.js's getGuestCatalog.
+  const alreadyBooked = Boolean(item.alreadyBooked);
+  const blocked = restricted || alreadyBooked;
+  // maxQuantity is set for requiresRemainingCapacity items (e.g. "Extra
+  // person") and for maxOnePerReservation items (capped at 1, or 0 once
+  // alreadyBooked) — null/undefined for every other item, so this never
   // caps anything that didn't already have a cap before.
   const atMaxQuantity = Number.isFinite(item.maxQuantity) && count >= item.maxQuantity;
   // The unit price + its label in the top-right corner never changes with
@@ -353,6 +361,8 @@ function InstantCatalogItem({ item, language, count, onChange, plates, onPlateCh
             <p className="mt-2 break-words text-xs font-medium text-amber-700 sm:text-sm">
               {t(language, "unitGroupRestrictedMessage")}
             </p>
+          ) : alreadyBooked ? (
+            <p className="mt-2 break-words text-xs text-stone-500 sm:text-sm">{t(language, "maxOneDogExplanation")}</p>
           ) : (
             breakdown && (
               <p className="mt-2 break-words text-xs text-stone-500 sm:text-sm">
@@ -364,7 +374,7 @@ function InstantCatalogItem({ item, language, count, onChange, plates, onPlateCh
               </p>
             )
           )}
-          {!restricted && item.actionType === "increase_occupancy" && count > 0 && (
+          {!blocked && item.actionType === "increase_occupancy" && count > 0 && (
             <p className="mt-2 break-words text-xs font-medium text-stone-600 sm:text-sm">
               {t(language, "extraPersonAmendmentNotice")}
             </p>
@@ -411,27 +421,37 @@ function InstantCatalogItem({ item, language, count, onChange, plates, onPlateCh
           widthClassName=""
           visibilityClassName="hidden sm:block"
         />
-        <div className="flex items-center gap-3">
-          <button
-            type="button"
-            onClick={() => onChange(Math.max(0, count - 1))}
-            disabled={count === 0 || restricted}
-            className="flex h-9 w-9 items-center justify-center rounded-full border border-stone-300 text-lg font-medium text-stone-600 transition hover:border-stone-400 hover:bg-stone-50 disabled:cursor-not-allowed disabled:opacity-40"
-            aria-label={t(language, "decreaseQuantity")}
-          >
-            –
-          </button>
-          <span className="w-6 text-center text-base font-medium text-stone-900">{count}</span>
-          <button
-            type="button"
-            onClick={() => onChange(count + 1)}
-            disabled={restricted || atMaxQuantity}
-            className="flex h-9 w-9 items-center justify-center rounded-full bg-stone-900 text-lg font-medium text-white transition hover:bg-black disabled:cursor-not-allowed disabled:bg-stone-300 disabled:opacity-60"
-            aria-label={t(language, "increaseQuantity")}
-          >
-            +
-          </button>
-        </div>
+        {alreadyBooked ? (
+          // maxOnePerReservation item already booked (e.g. "Hund"/dog) —
+          // no active "+" control at all, per the max-1-per-reservation
+          // rule; a badge in place of the stepper, never a permanently
+          // disabled "0 [+]" that could read as a bug.
+          <span className="whitespace-nowrap rounded-full border border-stone-300 px-3 py-1 text-xs font-medium uppercase tracking-wide text-stone-500">
+            {t(language, "alreadyBookedBadge")}
+          </span>
+        ) : (
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => onChange(Math.max(0, count - 1))}
+              disabled={count === 0 || restricted}
+              className="flex h-9 w-9 items-center justify-center rounded-full border border-stone-300 text-lg font-medium text-stone-600 transition hover:border-stone-400 hover:bg-stone-50 disabled:cursor-not-allowed disabled:opacity-40"
+              aria-label={t(language, "decreaseQuantity")}
+            >
+              –
+            </button>
+            <span className="w-6 text-center text-base font-medium text-stone-900">{count}</span>
+            <button
+              type="button"
+              onClick={() => onChange(count + 1)}
+              disabled={restricted || atMaxQuantity}
+              className="flex h-9 w-9 items-center justify-center rounded-full bg-stone-900 text-lg font-medium text-white transition hover:bg-black disabled:cursor-not-allowed disabled:bg-stone-300 disabled:opacity-60"
+              aria-label={t(language, "increaseQuantity")}
+            >
+              +
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -444,6 +464,9 @@ function RequestCatalogItem({ item, language, reservationId, lastName, guestName
   const [email, setEmail] = useState("");
   const [error, setError] = useState("");
   const restricted = item.unitGroupRestricted;
+  // See InstantCatalogItem above — same maxOnePerReservation concept (e.g.
+  // "Hund"/dog), just rendered through the request/Anfragen flow here.
+  const alreadyBooked = Boolean(item.alreadyBooked);
   const displayName = item.displayName[language];
   const description = item.description[language];
   const priceUnitLabel = item.priceUnitLabel[language];
@@ -494,6 +517,8 @@ function RequestCatalogItem({ item, language, reservationId, lastName, guestName
             <p className="mt-2 break-words text-xs font-medium text-amber-700 sm:text-sm">
               {t(language, "unitGroupRestrictedMessage")}
             </p>
+          ) : alreadyBooked ? (
+            <p className="mt-2 break-words text-xs text-stone-500 sm:text-sm">{t(language, "maxOneDogExplanation")}</p>
           ) : (
             <p className="mt-2 break-words text-xs text-stone-500 sm:text-sm">{t(language, "requestExplanation")}</p>
           )}
@@ -519,6 +544,13 @@ function RequestCatalogItem({ item, language, reservationId, lastName, guestName
           <button type="button" disabled className={`${SECONDARY_BUTTON} cursor-not-allowed opacity-40`}>
             {t(language, "requestButton")}
           </button>
+        ) : alreadyBooked ? (
+          // maxOnePerReservation item already booked (e.g. "Hund"/dog) — no
+          // active request action at all, per the max-1-per-reservation
+          // rule.
+          <span className="inline-flex items-center justify-center whitespace-nowrap rounded-full border border-stone-300 px-3 py-1.5 text-xs font-medium uppercase tracking-wide text-stone-500">
+            {t(language, "alreadyBookedBadge")}
+          </span>
         ) : status === "sent" ? (
           <div className="rounded-md border border-stone-200 bg-stone-50 px-3 py-2.5 text-sm text-stone-700">
             <p className="font-medium text-stone-900">{t(language, "requestSentTitle")}</p>

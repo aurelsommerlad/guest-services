@@ -676,7 +676,7 @@ import {
   confirmStayExtension,
   determineConsecutiveFreeNights,
 } from "../lib/guest.js";
-import { saveExtensionConfig, listExtensionRecords, claimStayExtension } from "../lib/store.js";
+import { saveExtensionConfig, listExtensionRecords, claimStayExtension, upsertCatalogItem } from "../lib/store.js";
 
 const DATA_DIR = path.join(process.cwd(), ".data");
 
@@ -1373,6 +1373,60 @@ test("confirmStayExtension: extends a per-night service covering every original 
       const records = await listExtensionRecords();
       assert.equal(records.length, 1);
       assert.equal(records[0].extras.length, 1);
+      assert.equal(records[0].extras[0].extended, true);
+      assert.equal(records[0].status, "confirmed");
+    } finally {
+      restore();
+    }
+  });
+});
+
+test("confirmStayExtension: extending an existing dog's dates is NOT blocked by the max-1-dog-per-reservation rule — this is the SAME dog, not a second one", async () => {
+  await withCleanLocalDb(async () => {
+    // Realistic setup: the dog service IS flagged maxOnePerReservation in
+    // the catalog (see lib/dogBooking.js / lib/guest.js's placeGuestOrder),
+    // but confirmStayExtension never consults that flag at all — it only
+    // ever extends a service that's already booked, by appending one date
+    // to its existing date set, never creating a second booking.
+    await upsertCatalogItem("TESTPROP", {
+      serviceId: "HUESLE-HUND",
+      code: "HUND",
+      name: "Hund",
+      displayName: "Hund",
+      active: true,
+      bookingRule: "per_night",
+      fulfillmentMode: "instant",
+      actionType: "service",
+      maxOnePerReservation: true,
+    });
+    await saveExtensionConfig("TESTPROP", {
+      extensionNightEnabled: true,
+      extensionDiscountPreArrivalOneNightGap: 20,
+      extensionDiscountPreArrivalStandard: 15,
+      extensionDiscountInHouseOneNightGap: 20,
+      extensionDiscountInHouseStandard: 15,
+      minSellableStayNights: 2,
+    });
+    const reservation = reservationFixture();
+    // The reservation already has exactly 1 dog booked (3 nights) — this is
+    // the scenario the max-1 rule exists to protect against a SECOND one,
+    // but the extension must still succeed and extend THIS dog.
+    const services = [serviceEntry("HUESLE-HUND", [["2026-10-10", 15], ["2026-10-11", 15], ["2026-10-12", 15]], { name: "Dog fee" })];
+    const { calls, restore } = installExtensionFetchMock({ reservation, availableNights: [true, false], services });
+    try {
+      const result = await confirmStayExtension({ reservationId: reservation.id, expectedCurrentDeparture: "2026-10-13" });
+      assert.equal(result.newDeparture, "2026-10-14");
+
+      const bookServiceCall = calls.find((c) => c.pathname.endsWith("/book-service") && c.body.serviceId === "HUESLE-HUND");
+      assert.ok(bookServiceCall, "the dog's service dates must still be extended, never rejected by the max-1 rule");
+      assert.deepEqual(
+        bookServiceCall.body.dates.map((d) => d.serviceDate),
+        ["2026-10-10", "2026-10-11", "2026-10-12", "2026-10-13"],
+        "same one dog, now covering one more night — never a second, separate dog booking"
+      );
+
+      const records = await listExtensionRecords();
+      assert.equal(records[0].extras[0].serviceId, "HUESLE-HUND");
       assert.equal(records[0].extras[0].extended, true);
       assert.equal(records[0].status, "confirmed");
     } finally {

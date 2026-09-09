@@ -224,6 +224,7 @@ function emptyRow(service) {
     actionType: "service",
     extraPersonPricePerNight: null,
     requiresVehicleRegistration: false,
+    maxOnePerReservation: false,
   };
 }
 
@@ -514,6 +515,21 @@ export default function CatalogManager() {
                 <p className="mt-0.5 text-xs text-slate-400">
                   Der Gast muss vor der Buchung ein Kennzeichen je gewählter Menge angeben (z. B. Parkplatz). Wird
                   auf primaryGuest.vehicleRegistration in Apaleo gespeichert.
+                </p>
+              </div>
+              <div className="sm:col-span-2">
+                <label className="flex items-center gap-2 text-sm text-slate-700">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(row.maxOnePerReservation)}
+                    onChange={(e) => updateRow(row.serviceId, { maxOnePerReservation: e.target.checked })}
+                  />
+                  Maximal 1 pro Reservierung (z. B. Hund)
+                </label>
+                <p className="mt-0.5 text-xs text-slate-400">
+                  Sobald einmal gebucht (egal ob über den Gäste-Bereich, Apaleo direkt, eine OTA oder Make), wird
+                  dieses Extra für die Reservierung als „Bereits gebucht" angezeigt und kann nicht erneut gebucht
+                  werden. Wird live gegen Apaleo geprüft, nie nur gegen den Frontend-Zustand.
                 </p>
               </div>
               <div className="sm:col-span-2">

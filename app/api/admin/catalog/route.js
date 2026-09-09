@@ -112,6 +112,12 @@ export async function POST(request) {
     // this item can be booked (e.g. parking). Independent of actionType and
     // never inferred from the service's name/code.
     requiresVehicleRegistration: Boolean(item.requiresVehicleRegistration),
+    // Default false = current behavior (see lib/dogBooking.js) — only true
+    // caps this service at a hard maximum of 1 booked per reservation
+    // (e.g. "Hund"/dog), re-verified live against Apaleo immediately before
+    // booking, never inferred from the service's name/code so it works for
+    // any property's own dog serviceId (e.g. "HUESLE-HUND").
+    maxOnePerReservation: Boolean(item.maxOnePerReservation),
   });
 
   return NextResponse.json({ item: saved });
