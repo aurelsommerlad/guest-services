@@ -149,3 +149,9 @@ Die öffentlichen `/api/guest/*`-Endpunkte sind davon nicht betroffen.
   mit dem Apaleo-Simulator `test/support/apaleo-simulator.mjs`, der jeden anderen Host
   blockiert). In Umgebungen mit Proxy: `NODE_USE_ENV_PROXY=1 npm test`.
 - `vercel.json` schaltet Deployments für den Entwicklungsbranch `claude/stay-api-bridge` ab.
+- Staging-Sicherheit (Umgebungen, KV-Trennung, Berechtigungen, Slack) und der Testplan für
+  den ersten echten Test gegen Apaleo TEST stehen im STAY-Repository unter
+  `docs/staging/extras-bridge-sicherheit.md` und `docs/staging/extras-bridge-testplan-JTKQSYFX-1.md`.
+- **Vor einem Staging-Deployment:** Production und Preview dieses Projekts teilen sich KV-Store,
+  Apaleo-Zugangsdaten und `JWT_SECRET`. Die Brücke gehört deshalb in ein eigenes
+  Staging-Projekt mit eigenem KV-Store und ohne Slack-Variable.
