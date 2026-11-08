@@ -120,3 +120,32 @@ Nummer oder der Nachname falsch war.
 - Kein automatischer E-Mail-Versand ans Frontoffice — `lib/notify.js` ist
   als Erweiterungspunkt vorbereitet (`notifyFrontOffice(order)`).
 - Kein mehrsprachiges Frontend (nur Deutsch).
+
+## Interne API für STAY (`/api/stay/v1/*`)
+
+Server-zu-Server-Schnittstelle, über die die STAY Guest App Extras lädt, bucht und anfragt.
+Die Geschäftslogik bleibt hier: Die Routen rufen `getGuestCatalog`, `placeGuestOrder`,
+`createGuestRequest`, `getStayExtensionOffer` und `confirmStayExtension` unverändert auf.
+Die öffentlichen `/api/guest/*`-Endpunkte sind davon nicht betroffen.
+
+| Route                   | Scope | Zweck                                                              |
+| ----------------------- | ----- | ------------------------------------------------------------------ |
+| `POST catalog`          | read  | Leistungen der Reservierung mit Live-Preis, Verlängerungsnacht     |
+| `POST overview`         | read  | Gebuchte Leistungen (Apaleo), Anfragen mit Status, Verlängerungen  |
+| `POST order`            | write | Sofortbuchung einer Leistung (inkl. Zusatzperson)                  |
+| `POST request`          | write | Anfrage für eine „Auf Anfrage“-Leistung                            |
+| `POST stay-extension`   | write | Verlängerungsnacht bestätigen                                      |
+
+- **Aus, solange nicht konfiguriert:** Ohne `STAY_BRIDGE_ENABLED`, `STAY_BRIDGE_SECRET`,
+  `STAY_BRIDGE_TENANT` und `STAY_BRIDGE_PROPERTY_IDS` antworten alle Routen mit 404.
+- **Token:** HS256, Aussteller `stay`, Zielgruppe `extras-stay-bridge`, höchstens 120 s gültig,
+  gebunden an Mandant, Apaleo-Property und Reservierung; jede Token-ID wird genau einmal
+  akzeptiert. Danach muss die Reservierung in Apaleo existieren und zur Property gehören.
+- **Schutz für Buchungen:** Idempotenzschlüssel (UUID) pro Bestätigung, Sperre gegen parallele
+  Buchung derselben Leistung, erneute Preisprüfung (`expectedPrice`), keine zweite Buchung einer
+  bereits gebuchten Leistung, Rate-Limits pro Reservierung, Prüfprotokoll `stay-bridge:audit`
+  ohne Namen oder Kennzeichen.
+- **Tests:** `test/stay-bridge-unit.test.mjs`, `test/stay-bridge.test.mjs` (echter `next dev`
+  mit dem Apaleo-Simulator `test/support/apaleo-simulator.mjs`, der jeden anderen Host
+  blockiert). In Umgebungen mit Proxy: `NODE_USE_ENV_PROXY=1 npm test`.
+- `vercel.json` schaltet Deployments für den Entwicklungsbranch `claude/stay-api-bridge` ab.

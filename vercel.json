@@ -1,0 +1,7 @@
+{
+  "git": {
+    "deploymentEnabled": {
+      "claude/stay-api-bridge": false
+    }
+  }
+}
