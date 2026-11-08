@@ -254,6 +254,9 @@ test("extension night: price re-check, confirm once, replay, then no longer offe
   assert.equal(wrong.body.error, "price_changed");
   const catalog = await call("catalog");
   const expectedPrice = catalog.body.extension.totalPrice;
+  // The booked parking space (per night) is extended too – with its amount, not a blank.
+  const parking = catalog.body.extension.extras.find((extra) => extra.serviceId === "TEST-PKW");
+  assert.equal(parking?.amountCents, 0);
   const key = randomUUID();
   const ok = await call("stay-extension", { idempotencyKey: key, currentDeparture: "2027-01-14", expectedPrice });
   assert.equal(ok.status, 201, JSON.stringify(ok.body));
@@ -274,6 +277,7 @@ test("overview: booked services from Apaleo, the request with its Extras status,
   assert.equal(booked["TEST-ECI"].name.de, "Früher Check-in");
   assert.deepEqual(body.requests.map((r) => [r.serviceId, r.status]), [["TEST-BABY", "pending"]]);
   assert.deepEqual(body.extensions.map((e) => e.newDeparture), ["2027-01-15"]);
+  assert.deepEqual(body.amendments.map((a) => [a.serviceId, a.count, a.total?.amountCents]), [["TEST-EXTRPERSON", 1, 6000]]);
 });
 
 test("rate limit per reservation on write calls", async () => {

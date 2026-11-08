@@ -115,13 +115,15 @@ function money(amount, vat) {
   return { grossAmount: amount, netAmount: Math.round((amount / (1 + vat / 100)) * 100) / 100, vatType: vat === 19 ? "Normal" : "Reduced", vatPercent: vat, currency: "EUR" };
 }
 
-function serviceOffers(reservation) {
+function serviceOffers(reservation, overrides = {}) {
   const nightList = nights(reservation.arrival, reservation.departure);
   const arrival = reservation.arrival.slice(0, 10);
   const departure = reservation.departure.slice(0, 10);
   return Object.entries(SERVICES)
     .filter(([, s]) => s.rule !== "none")
-    .map(([id, s]) => {
+    .map(([id, def]) => {
+      // `priceOverrides` in the state file lets a test change a price between page load and booking.
+      const s = { ...def, price: overrides[id] ?? def.price };
       const dates = s.rule === "arrival" ? [arrival] : s.rule === "departure" ? [departure] : nightList;
       return {
         service: { id, code: s.code, name: s.name.en, description: s.name.en, pricingUnit: "Room", defaultGrossPrice: { amount: s.price, currency: "EUR" } },
@@ -161,7 +163,7 @@ function handle(state, method, url, body) {
   if ((m = path.match(/^\/booking\/v1\/reservations\/([^/]+)\/service-offers$/)) && method === "GET") {
     const reservation = state.reservations[decodeURIComponent(m[1])];
     if (!reservation) return json({ messages: ["not found"] }, 404);
-    return json({ services: serviceOffers(reservation) });
+    return json({ services: serviceOffers(reservation, state.priceOverrides) });
   }
   if ((m = path.match(/^\/booking\/v1\/reservation-actions\/([^/]+)\/book-service$/)) && method === "PUT") {
     const id = decodeURIComponent(m[1]);
