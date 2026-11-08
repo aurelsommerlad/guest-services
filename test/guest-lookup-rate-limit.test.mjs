@@ -15,7 +15,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { spawn } from "node:child_process";
+import { startNextDev, waitForReady } from "./support/next-dev-server.mjs";
 import { rm } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -23,26 +23,10 @@ import { fileURLToPath } from "node:url";
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const PORT = 3922;
 const BASE_URL = `http://localhost:${PORT}`;
-const READY_TIMEOUT_MS = 60_000;
 
-async function waitForServer(deadline) {
-  while (Date.now() < deadline) {
-    try {
-      const res = await fetch(BASE_URL);
-      if (res.ok || res.status === 404) return;
-    } catch {
-      // not up yet
-    }
-    await new Promise((r) => setTimeout(r, 300));
-  }
-  throw new Error(`Server did not become ready within ${READY_TIMEOUT_MS}ms`);
-}
 
 function startServer() {
-  const nextBin = path.join(ROOT, "node_modules", ".bin", "next");
-  return spawn(nextBin, ["dev", "-p", String(PORT)], {
-    cwd: ROOT,
-    env: {
+  return startNextDev({ root: ROOT, port: PORT, env: {
       ...process.env,
       JWT_SECRET: "test-secret-for-rate-limit-regression-test",
       KV_REST_API_URL: "",
@@ -51,9 +35,7 @@ function startServer() {
       // real Apaleo, regardless of what .env.local has configured locally.
       APALEO_CLIENT_ID: "",
       APALEO_CLIENT_SECRET: "",
-    },
-    stdio: "pipe",
-  });
+    } });
 }
 
 function lookup(ip, i) {
@@ -69,7 +51,7 @@ test("guest lookup: repeated attempts from the same client are rate-limited", as
 
   const server = startServer();
   try {
-    await waitForServer(Date.now() + READY_TIMEOUT_MS);
+    await waitForReady(server, BASE_URL);
 
     const ip = "203.0.113.42"; // TEST-NET-3, RFC 5737 — never a real client
     const statuses = [];
@@ -90,7 +72,7 @@ test("guest lookup: repeated attempts from the same client are rate-limited", as
     const otherClientRes = await lookup("198.51.100.7", "other");
     assert.notEqual(otherClientRes.status, 429, "a different client must have its own quota");
   } finally {
-    server.kill("SIGTERM");
+    await server.stop();
     await rm(path.join(ROOT, ".data"), { recursive: true, force: true });
   }
 });

@@ -12,7 +12,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { spawn } from "node:child_process";
+import { startNextDev, waitForReady } from "./support/next-dev-server.mjs";
 import { rm } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -20,7 +20,6 @@ import { fileURLToPath } from "node:url";
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const PORT = 3920;
 const BASE_URL = `http://localhost:${PORT}`;
-const READY_TIMEOUT_MS = 60_000;
 
 function extractSessionCookie(setCookieHeader) {
   const match = /session=[^;]+/.exec(setCookieHeader || "");
@@ -28,31 +27,14 @@ function extractSessionCookie(setCookieHeader) {
   return match[0];
 }
 
-async function waitForServer(deadline) {
-  while (Date.now() < deadline) {
-    try {
-      const res = await fetch(BASE_URL);
-      if (res.ok || res.status === 404) return;
-    } catch {
-      // not up yet
-    }
-    await new Promise((r) => setTimeout(r, 300));
-  }
-  throw new Error(`Server did not become ready within ${READY_TIMEOUT_MS}ms`);
-}
 
 function startServer() {
-  const nextBin = path.join(ROOT, "node_modules", ".bin", "next");
-  return spawn(nextBin, ["dev", "-p", String(PORT)], {
-    cwd: ROOT,
-    env: {
+  return startNextDev({ root: ROOT, port: PORT, env: {
       ...process.env,
       JWT_SECRET: "test-secret-for-price-unit-label-regression-test",
       KV_REST_API_URL: "",
       KV_REST_API_TOKEN: "",
-    },
-    stdio: "pipe",
-  });
+    } });
 }
 
 test("priceUnitLabel is persisted through the real admin catalog API", async () => {
@@ -60,7 +42,7 @@ test("priceUnitLabel is persisted through the real admin catalog API", async () 
 
   const server = startServer();
   try {
-    await waitForServer(Date.now() + READY_TIMEOUT_MS);
+    await waitForReady(server, BASE_URL);
 
     const setupRes = await fetch(`${BASE_URL}/api/admin/setup`, {
       method: "POST",
@@ -140,7 +122,7 @@ test("priceUnitLabel is persisted through the real admin catalog API", async () 
     const whitespaceBody = await whitespaceRes.json();
     assert.equal(whitespaceBody.item.priceUnitLabel, "");
   } finally {
-    server.kill("SIGTERM");
+    await server.stop();
     await rm(path.join(ROOT, ".data"), { recursive: true, force: true });
   }
 });

@@ -14,7 +14,7 @@
 
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
-import { spawn } from "node:child_process";
+import { startNextDev, waitForReady } from "./support/next-dev-server.mjs";
 import { randomUUID } from "node:crypto";
 import { readFile, rm, mkdir } from "node:fs/promises";
 import path from "node:path";
@@ -29,6 +29,15 @@ const DATA_DIR = path.join(ROOT, ".data");
 const SIM_STATE = path.join(DATA_DIR, "apaleo-sim-bridge-test.json");
 const SECRET = "test-only-stay-bridge-secret-0123456789abcdef";
 const RES = "JTKQSYFX-1";
+// A two-night stay 60 days from now – relative, so these tests never expire.
+function day(offset) {
+  const d = new Date();
+  d.setUTCDate(d.getUTCDate() + offset);
+  return d.toISOString().slice(0, 10);
+}
+const ARRIVAL = day(60);
+const DEPARTURE = day(62);
+const NEW_DEPARTURE = day(63);
 let server;
 
 async function token(overrides = {}, { secret = SECRET, lifetime = 60, audience = "extras-stay-bridge" } = {}) {
@@ -65,29 +74,19 @@ function writes(state, fragment) {
   return state.calls.filter((c) => c.method !== "GET" && c.path.includes(fragment));
 }
 
-async function waitForServer() {
-  const deadline = Date.now() + 120_000;
-  while (Date.now() < deadline) {
-    try {
-      const res = await fetch(`${BASE}/api/stay/v1/catalog`, { method: "POST" });
-      if (res.status === 401 || res.status === 404) return;
-    } catch {}
-    await new Promise((r) => setTimeout(r, 500));
-  }
-  throw new Error("server did not become ready");
-}
 
 before(async () => {
   await rm(DATA_DIR, { recursive: true, force: true });
   await mkdir(DATA_DIR, { recursive: true });
   await seedTestCatalog();
-  server = spawn(path.join(ROOT, "node_modules/.bin/next"), ["dev", "-p", String(PORT)], {
-    cwd: ROOT,
+  server = startNextDev({
+    root: ROOT,
+    port: PORT,
     env: {
-      ...process.env,
       NODE_OPTIONS: `--import ${path.join(ROOT, "test/support/apaleo-simulator.mjs")}`,
-      NODE_USE_ENV_PROXY: process.env.NODE_USE_ENV_PROXY || "",
       APALEO_SIM_STATE: SIM_STATE,
+      APALEO_SIM_ARRIVAL: ARRIVAL,
+      APALEO_SIM_DEPARTURE: DEPARTURE,
       APALEO_CLIENT_ID: "simulated",
       APALEO_CLIENT_SECRET: "simulated",
       STAY_BRIDGE_ENABLED: "true",
@@ -100,14 +99,12 @@ before(async () => {
       KV_REST_API_URL: "",
       KV_REST_API_TOKEN: "",
     },
-    stdio: "ignore",
   });
-  await waitForServer();
+  await waitForReady(server, BASE, { probePath: "/api/stay/v1/catalog" });
 });
 
 after(async () => {
-  server?.kill("SIGTERM");
-  await new Promise((r) => setTimeout(r, 500));
+  await server?.stop();
   await rm(DATA_DIR, { recursive: true, force: true });
 });
 
@@ -147,8 +144,8 @@ test("catalog: every curated service with its live price, extension night, nothi
   assert.equal(byId["TEST-EXTRPERSON"].maxQuantity, 3); // 6 max persons − 2 adults − 1 child
   assert.equal(byId["TEST-PKW"].requiresVehicleRegistration, true);
   assert.ok(body.items.every((item) => item.bookedCount === 0));
-  assert.equal(body.extension.currentDeparture, "2027-01-14");
-  assert.equal(body.extension.newDeparture, "2027-01-15");
+  assert.equal(body.extension.currentDeparture, DEPARTURE);
+  assert.equal(body.extension.newDeparture, NEW_DEPARTURE);
   assert.deepEqual(body.extension.totalPrice, { amountCents: 8910, currency: "EUR" });
   // No guest data in the catalog.
   assert.ok(!JSON.stringify(body).includes("Mustermann"));
@@ -182,7 +179,7 @@ test("order: books once; the same key replays, a new key is refused as already b
   const first = await call("order", line);
   assert.equal(first.status, 201);
   assert.equal(first.body.status, "booked");
-  assert.deepEqual(first.body.serviceDates, ["2027-01-12"]);
+  assert.deepEqual(first.body.serviceDates, [ARRIVAL]);
   const again = await call("order", line);
   assert.equal(again.status, 201);
   assert.deepEqual(again.body, first.body);
@@ -249,7 +246,7 @@ test("request: parallel duplicates create exactly one pending request, no Slack 
 });
 
 test("extension night: price re-check, confirm once, replay, then no longer offered", async () => {
-  const wrong = await call("stay-extension", { idempotencyKey: randomUUID(), currentDeparture: "2027-01-14", expectedPrice: { amountCents: 5000, currency: "EUR" } });
+  const wrong = await call("stay-extension", { idempotencyKey: randomUUID(), currentDeparture: DEPARTURE, expectedPrice: { amountCents: 5000, currency: "EUR" } });
   assert.equal(wrong.status, 409);
   assert.equal(wrong.body.error, "price_changed");
   const catalog = await call("catalog");
@@ -258,14 +255,25 @@ test("extension night: price re-check, confirm once, replay, then no longer offe
   const parking = catalog.body.extension.extras.find((extra) => extra.serviceId === "TEST-PKW");
   assert.equal(parking?.amountCents, 0);
   const key = randomUUID();
-  const ok = await call("stay-extension", { idempotencyKey: key, currentDeparture: "2027-01-14", expectedPrice });
+  const ok = await call("stay-extension", { idempotencyKey: key, currentDeparture: DEPARTURE, expectedPrice });
   assert.equal(ok.status, 201, JSON.stringify(ok.body));
-  assert.equal(ok.body.newDeparture, "2027-01-15");
-  const replay = await call("stay-extension", { idempotencyKey: key, currentDeparture: "2027-01-14", expectedPrice });
+  assert.equal(ok.body.newDeparture, NEW_DEPARTURE);
+  const replay = await call("stay-extension", { idempotencyKey: key, currentDeparture: DEPARTURE, expectedPrice });
   assert.deepEqual(replay.body, ok.body);
-  const again = await call("stay-extension", { idempotencyKey: randomUUID(), currentDeparture: "2027-01-14", expectedPrice });
+  const again = await call("stay-extension", { idempotencyKey: randomUUID(), currentDeparture: DEPARTURE, expectedPrice });
   assert.equal(again.status, 409);
-  assert.equal((await sim()).reservations[RES].departure.slice(0, 10), "2027-01-15");
+  const state = await sim();
+  assert.equal(state.reservations[RES].departure.slice(0, 10), NEW_DEPARTURE);
+  // The Late Check-out booked earlier moves to the new departure: one date,
+  // same count and amount (Apaleo TEST-LCO: mode Departure, postNextDay).
+  const lco = state.services[RES].find((s) => s.service.id === "TEST-LCO");
+  assert.deepEqual(lco.dates.map((d) => [d.serviceDate, d.count, d.amount.grossAmount]), [[NEW_DEPARTURE, 1, 20]]);
+  const db = JSON.parse(await readFile(path.join(DATA_DIR, "db.json"), "utf8"));
+  const [record] = Object.values(db["stay-extensions:records"] || {});
+  assert.deepEqual(
+    record.lateCheckoutMoves.map((m) => [m.serviceId, m.oldDeparture, m.newDeparture, m.moved, m.verified]),
+    [["TEST-LCO", DEPARTURE, NEW_DEPARTURE, true, true]],
+  );
 });
 
 test("overview: booked services from Apaleo, the request with its Extras status, the extension", async () => {
@@ -276,7 +284,7 @@ test("overview: booked services from Apaleo, the request with its Extras status,
   assert.equal(booked["TEST-FINALCLEAN"], undefined); // mandatory rate-plan services are not "extras"
   assert.equal(booked["TEST-ECI"].name.de, "Früher Check-in");
   assert.deepEqual(body.requests.map((r) => [r.serviceId, r.status]), [["TEST-BABY", "pending"]]);
-  assert.deepEqual(body.extensions.map((e) => e.newDeparture), ["2027-01-15"]);
+  assert.deepEqual(body.extensions.map((e) => e.newDeparture), [NEW_DEPARTURE]);
   assert.deepEqual(body.amendments.map((a) => [a.serviceId, a.count, a.total?.amountCents]), [["TEST-EXTRPERSON", 1, 6000]]);
 });
 

@@ -6,12 +6,20 @@
 //
 // Run with: npm test
 
-import { test } from "node:test";
+import { test, mock } from "node:test";
 import assert from "node:assert/strict";
 import { rm } from "node:fs/promises";
 import path from "node:path";
 import { placeGuestOrder } from "../lib/guest.js";
 import { upsertCatalogItem } from "../lib/store.js";
+
+// These fixtures describe stays in October 2026 as seen from September 2026,
+// when the tests were written. The code under test compares dates with
+// "today" (isPastDate, determineStayExtensionPhase), so "today" is fixed here
+// instead of rewriting fixtures or weakening expectations. Only Date is
+// mocked; timers keep running normally.
+mock.timers.enable({ apis: ["Date"], now: new Date("2026-09-09T10:00:00Z") });
+
 
 const DATA_DIR = path.join(process.cwd(), ".data");
 

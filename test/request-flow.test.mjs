@@ -26,7 +26,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { spawn } from "node:child_process";
+import { startNextDev, waitForReady } from "./support/next-dev-server.mjs";
 import { readFile, writeFile, mkdir, rm } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -34,7 +34,6 @@ import { fileURLToPath } from "node:url";
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const PORT = 3921;
 const BASE_URL = `http://localhost:${PORT}`;
-const READY_TIMEOUT_MS = 60_000;
 const DATA_DIR = path.join(ROOT, ".data");
 const DB_PATH = path.join(DATA_DIR, "db.json");
 
@@ -44,31 +43,14 @@ function extractSessionCookie(setCookieHeader) {
   return match[0];
 }
 
-async function waitForServer(deadline) {
-  while (Date.now() < deadline) {
-    try {
-      const res = await fetch(BASE_URL);
-      if (res.ok || res.status === 404) return;
-    } catch {
-      // not up yet
-    }
-    await new Promise((r) => setTimeout(r, 300));
-  }
-  throw new Error(`Server did not become ready within ${READY_TIMEOUT_MS}ms`);
-}
 
 function startServer() {
-  const nextBin = path.join(ROOT, "node_modules", ".bin", "next");
-  return spawn(nextBin, ["dev", "-p", String(PORT)], {
-    cwd: ROOT,
-    env: {
+  return startNextDev({ root: ROOT, port: PORT, env: {
       ...process.env,
       JWT_SECRET: "test-secret-for-request-flow-regression-test",
       KV_REST_API_URL: "",
       KV_REST_API_TOKEN: "",
-    },
-    stdio: "pipe",
-  });
+    } });
 }
 
 // Seeds a request record directly into the local JSON fallback DB, in the
@@ -119,7 +101,7 @@ test("request-only extras: fulfillmentMode persistence and admin request lifecyc
 
   const server = startServer();
   try {
-    await waitForServer(Date.now() + READY_TIMEOUT_MS);
+    await waitForReady(server, BASE_URL);
 
     const setupRes = await fetch(`${BASE_URL}/api/admin/setup`, {
       method: "POST",
@@ -240,7 +222,7 @@ test("request-only extras: fulfillmentMode persistence and admin request lifecyc
       assert.equal(res.status, 409);
     });
   } finally {
-    server.kill("SIGTERM");
+    await server.stop();
     await rm(DATA_DIR, { recursive: true, force: true });
   }
 });

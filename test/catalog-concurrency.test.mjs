@@ -9,7 +9,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { spawn } from "node:child_process";
+import { startNextDev, waitForReady } from "./support/next-dev-server.mjs";
 import { rm } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -17,7 +17,6 @@ import { fileURLToPath } from "node:url";
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const PORT = 3919;
 const BASE_URL = `http://localhost:${PORT}`;
-const READY_TIMEOUT_MS = 60_000;
 
 function extractSessionCookie(setCookieHeader) {
   const match = /session=[^;]+/.exec(setCookieHeader || "");
@@ -25,31 +24,14 @@ function extractSessionCookie(setCookieHeader) {
   return match[0];
 }
 
-async function waitForServer(deadline) {
-  while (Date.now() < deadline) {
-    try {
-      const res = await fetch(BASE_URL);
-      if (res.ok || res.status === 404) return;
-    } catch {
-      // not up yet
-    }
-    await new Promise((r) => setTimeout(r, 300));
-  }
-  throw new Error(`Server did not become ready within ${READY_TIMEOUT_MS}ms`);
-}
 
 function startServer() {
-  const nextBin = path.join(ROOT, "node_modules", ".bin", "next");
-  const child = spawn(nextBin, ["dev", "-p", String(PORT)], {
-    cwd: ROOT,
-    env: {
+  const child = startNextDev({ root: ROOT, port: PORT, env: {
       ...process.env,
       JWT_SECRET: "test-secret-for-catalog-concurrency-regression-test",
       KV_REST_API_URL: "",
       KV_REST_API_TOKEN: "",
-    },
-    stdio: "pipe",
-  });
+    } });
   return child;
 }
 
@@ -64,7 +46,7 @@ test("concurrent admin catalog saves for different services never overwrite each
   });
 
   try {
-    await waitForServer(Date.now() + READY_TIMEOUT_MS);
+    await waitForReady(server, BASE_URL);
 
     const setupRes = await fetch(`${BASE_URL}/api/admin/setup`, {
       method: "POST",
@@ -146,7 +128,7 @@ test("concurrent admin catalog saves for different services never overwrite each
     assert.ok(added, "concurrently-added new item disappeared");
     assert.equal(afterUpdate.length, ROUNDS * 2 + 1, "item count wrong after concurrent update + add");
   } finally {
-    server.kill("SIGTERM");
+    await server.stop();
     await rm(path.join(ROOT, ".data"), { recursive: true, force: true });
     if (serverError && process.env.DEBUG_TEST_SERVER) {
       console.error("dev server stderr:\n" + serverError);

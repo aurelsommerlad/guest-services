@@ -19,14 +19,15 @@ if (!STATE) throw new Error("apaleo-simulator: APALEO_SIM_STATE is required");
 const realFetch = globalThis.fetch;
 const RESERVATION_ID = process.env.APALEO_SIM_RESERVATION || "JTKQSYFX-1";
 
+// availability.mode / postNextDay as defined for the TEST property in Apaleo (read 2026-11-08).
 const SERVICES = {
-  "TEST-ECI": { code: "ECI", name: { de: "Früher Check-in", en: "Early Check-in" }, price: 20, vat: 7, rule: "arrival" },
-  "TEST-LCO": { code: "LCO", name: { de: "Später Check-out", en: "Late Check-out" }, price: 20, vat: 7, rule: "departure" },
-  "TEST-HUND": { code: "HUND", name: { de: "Hund", en: "Dog fee" }, price: 15, vat: 19, rule: "night" },
-  "TEST-PKW": { code: "PKW", name: { de: "Parkplatz", en: "Car park" }, price: 0, vat: 19, rule: "night" },
-  "TEST-BABY": { code: "BABY", name: { de: "Babybett", en: "Baby cot" }, price: 15, vat: 7, rule: "night" },
-  "TEST-EXTRPERSON": { code: "EXTRPERSON", name: { de: "Zusatzperson", en: "Extra person" }, price: 30, vat: 7, rule: "night" },
-  "TEST-FINALCLEAN": { code: "FINALCLEAN", name: { de: "Endreinigung", en: "Final cleaning on departure" }, price: 139, vat: 7, rule: "none" },
+  "TEST-ECI": { code: "ECI", name: { de: "Früher Check-in", en: "Early Check-in" }, price: 20, vat: 7, rule: "arrival", mode: "Arrival", postNextDay: false },
+  "TEST-LCO": { code: "LCO", name: { de: "Später Check-out", en: "Late Check-out" }, price: 20, vat: 7, rule: "departure", mode: "Departure", postNextDay: true },
+  "TEST-HUND": { code: "HUND", name: { de: "Hund", en: "Dog fee" }, price: 15, vat: 19, rule: "night", mode: "Daily", postNextDay: false },
+  "TEST-PKW": { code: "PKW", name: { de: "Parkplatz", en: "Car park" }, price: 0, vat: 19, rule: "night", mode: "Daily", postNextDay: false },
+  "TEST-BABY": { code: "BABY", name: { de: "Babybett", en: "Baby cot" }, price: 15, vat: 7, rule: "night", mode: "Daily", postNextDay: false },
+  "TEST-EXTRPERSON": { code: "EXTRPERSON", name: { de: "Zusatzperson", en: "Extra person" }, price: 30, vat: 7, rule: "night", mode: "Daily", postNextDay: false },
+  "TEST-FINALCLEAN": { code: "FINALCLEAN", name: { de: "Endreinigung", en: "Final cleaning on departure" }, price: 139, vat: 7, rule: "none", mode: "Departure", postNextDay: false },
 };
 
 function addDays(date, days) {
@@ -115,7 +116,7 @@ function money(amount, vat) {
   return { grossAmount: amount, netAmount: Math.round((amount / (1 + vat / 100)) * 100) / 100, vatType: vat === 19 ? "Normal" : "Reduced", vatPercent: vat, currency: "EUR" };
 }
 
-function serviceOffers(reservation, overrides = {}) {
+function serviceOffers(reservation, overrides = {}, availability = {}) {
   const nightList = nights(reservation.arrival, reservation.departure);
   const arrival = reservation.arrival.slice(0, 10);
   const departure = reservation.departure.slice(0, 10);
@@ -129,7 +130,14 @@ function serviceOffers(reservation, overrides = {}) {
         service: { id, code: s.code, name: s.name.en, description: s.name.en, pricingUnit: "Room", defaultGrossPrice: { amount: s.price, currency: "EUR" } },
         count: 1,
         totalAmount: money(s.price * dates.length, s.vat),
-        dates: dates.map((serviceDate) => ({ serviceDate, amount: money(s.price, s.vat), isDefaultDate: true, isMandatory: false })),
+        dates: dates.map((serviceDate) => ({
+          serviceDate,
+          amount: money(s.price, s.vat),
+          isDefaultDate: true,
+          isMandatory: false,
+          // `availability` in the state file: { serviceId: { date: count } }.
+          ...(availability[id]?.[serviceDate] !== undefined ? { availableCount: availability[id][serviceDate] } : {}),
+        })),
       };
     });
 }
@@ -163,7 +171,7 @@ function handle(state, method, url, body) {
   if ((m = path.match(/^\/booking\/v1\/reservations\/([^/]+)\/service-offers$/)) && method === "GET") {
     const reservation = state.reservations[decodeURIComponent(m[1])];
     if (!reservation) return json({ messages: ["not found"] }, 404);
-    return json({ services: serviceOffers(reservation, state.priceOverrides) });
+    return json({ services: serviceOffers(reservation, state.priceOverrides, state.availability) });
   }
   if ((m = path.match(/^\/booking\/v1\/reservation-actions\/([^/]+)\/book-service$/)) && method === "PUT") {
     const id = decodeURIComponent(m[1]);
@@ -217,9 +225,9 @@ function handle(state, method, url, body) {
       name: localized ? def.name : def.name.en,
       description: localized ? def.name : def.name.en,
       pricingUnit: "Room",
-      postNextDay: false,
+      postNextDay: def.postNextDay,
       defaultGrossPrice: { amount: def.price, currency: "EUR" },
-      availability: { mode: def.rule === "night" ? "Daily" : "Arrival" },
+      availability: { mode: def.mode },
     });
   }
   if ((m = path.match(/^\/inventory\/v1\/unit-groups\/([^/]+)$/)) && method === "GET") {

@@ -15,7 +15,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { spawn } from "node:child_process";
+import { startNextDev, waitForReady } from "./support/next-dev-server.mjs";
 import { rm, mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -26,34 +26,16 @@ const PORT = 3923;
 const PORT_NO_SECRET = 3924;
 const BASE_URL = `http://localhost:${PORT}`;
 const BASE_URL_NO_SECRET = `http://localhost:${PORT_NO_SECRET}`;
-const READY_TIMEOUT_MS = 60_000;
 const DATA_DIR = path.join(ROOT, ".data");
 
-async function waitForServer(base, deadline) {
-  while (Date.now() < deadline) {
-    try {
-      const res = await fetch(base);
-      if (res.ok || res.status === 404) return;
-    } catch {
-      // not up yet
-    }
-    await new Promise((r) => setTimeout(r, 300));
-  }
-  throw new Error(`Server at ${base} did not become ready within ${READY_TIMEOUT_MS}ms`);
-}
 
 function startServer(port, extraEnv = {}) {
-  const nextBin = path.join(ROOT, "node_modules", ".bin", "next");
-  return spawn(nextBin, ["dev", "-p", String(port)], {
-    cwd: ROOT,
-    env: {
+  return startNextDev({ root: ROOT, port: port, env: {
       ...process.env,
       KV_REST_API_URL: "",
       KV_REST_API_TOKEN: "",
       ...extraEnv,
-    },
-    stdio: "pipe",
-  });
+    } });
 }
 
 /** Parses a single Set-Cookie header into { value, attrs }. */
@@ -70,7 +52,7 @@ test("admin login: session cookie is host-only, correctly flagged, and the sessi
 
   const server = startServer(PORT, { JWT_SECRET: "test-secret-for-admin-login-cookie-test" });
   try {
-    await waitForServer(BASE_URL, Date.now() + READY_TIMEOUT_MS);
+    await waitForReady(server, BASE_URL);
 
     const setupRes = await fetch(`${BASE_URL}/api/admin/setup`, {
       method: "POST",
@@ -145,7 +127,7 @@ test("admin login: session cookie is host-only, correctly flagged, and the sessi
       `logout must expire the cookie immediately, got: ${logoutSetCookie}`
     );
   } finally {
-    server.kill("SIGTERM");
+    await server.stop();
     await rm(DATA_DIR, { recursive: true, force: true });
   }
 });
@@ -177,7 +159,7 @@ test("admin login: a misconfigured deployment (missing JWT_SECRET) fails cleanly
   // JWT_SECRET intentionally omitted entirely.
   const server = startServer(PORT_NO_SECRET, { JWT_SECRET: "" });
   try {
-    await waitForServer(BASE_URL_NO_SECRET, Date.now() + READY_TIMEOUT_MS);
+    await waitForReady(server, BASE_URL_NO_SECRET);
 
     const loginRes = await fetch(`${BASE_URL_NO_SECRET}/api/admin/login`, {
       method: "POST",
@@ -192,7 +174,7 @@ test("admin login: a misconfigured deployment (missing JWT_SECRET) fails cleanly
     assert.ok(typeof body.error === "string" && body.error.length > 0);
     assert.ok(!loginRes.headers.get("set-cookie"), "no session cookie must be set on failure");
   } finally {
-    server.kill("SIGTERM");
+    await server.stop();
     await rm(DATA_DIR, { recursive: true, force: true });
   }
 });
